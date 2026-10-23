@@ -22,11 +22,16 @@ export function load(moduleId, fallback) {
 export function save(moduleId, data) {
   try {
     localStorage.setItem(PREFIX + moduleId, JSON.stringify(data));
-    return true;
   } catch {
     return false;
   }
+  saveListeners.forEach(fn => fn(moduleId));
+  return true;
 }
+
+// Fires after any module saves in this window (used to keep reminders in step).
+const saveListeners = new Set();
+export function onAnySave(fn) { saveListeners.add(fn); return () => saveListeners.delete(fn); }
 
 // Fires when another tab or window of the app changes a module's data.
 export function onChange(moduleId, fn) {
@@ -44,7 +49,8 @@ export function getMeta() {
   try { return JSON.parse(localStorage.getItem(META_KEY) || "{}"); } catch { return {}; }
 }
 export function setMeta(patch) {
-  try { localStorage.setItem(META_KEY, JSON.stringify({ ...getMeta(), ...patch })); } catch {}
+  try { localStorage.setItem(META_KEY, JSON.stringify({ ...getMeta(), ...patch })); } catch { return; }
+  saveListeners.forEach(fn => fn("_meta"));
 }
 
 // Ask the browser not to clear the app's data when the phone is low on space.

@@ -6,7 +6,7 @@
 //                       createdAt, updatedAt } } }
 
 import * as store from "../store.js";
-import { el, isoDate, parseDate, addDays, formatDate } from "../ui.js";
+import { el, isoDate, parseDate, addDays, formatDate, datePick } from "../ui.js";
 
 const ID = "people";
 const EVERY = [[7, "Week"], [14, "2 weeks"], [30, "Month"], [60, "2 months"], [90, "3 months"]];
@@ -208,7 +208,10 @@ export default {
     // ----- detail -----
     function renderDetail(p) {
       const st = status(p);
-      const when = el("input", { type: "date", id: "pp-when", value: today(), max: today(), style: "width:auto" });
+      const setContacts = contacts => {
+        all[p.id] = { ...p, contacts: [...new Set(contacts)].sort().reverse(), updatedAt: new Date().toISOString() };
+        saveAll(all); render();
+      };
       root.append(el("section", { class: "card" },
         el("div", { class: "rowhead" },
           el("div", {}, p.note ? el("p", { class: "muted", text: p.note }) : null,
@@ -216,22 +219,18 @@ export default {
           el("span", { class: "pill", style: `--pc:${st.color}`, text: st.label })),
         el("div", { class: "tools" },
           el("button", { class: "btn primary", disabled: daysSince(p) === 0, onclick: () => { logToday(all, p.id); all = loadAll(); render(); } }, "Talked today"),
-          el("span", { class: "small muted", text: "or on" }), when,
-          el("button", { class: "btn small", onclick: () => {
-            if (!when.value) return;
-            const c = [...new Set([when.value, ...(p.contacts || [])])].sort().reverse();
-            all[p.id] = { ...p, contacts: c, updatedAt: new Date().toISOString() }; saveAll(all); render();
-          } }, "Log"))));
+          datePick("Another day…", { max: today(), ariaLabel: `Log a conversation with ${p.name} on another day` },
+            d => setContacts([d, ...(p.contacts || [])])))));
 
       const hist = (p.contacts || []);
       root.append(el("section", { class: "section" },
-        el("h2", { text: "Conversations" }),
+        el("div", { class: "rowhead" }, el("h2", { text: "Conversations" }), hist.length ? el("span", { class: "small muted", text: "Tap a date to change it" }) : null),
         hist.length
           ? el("div", { class: "rows" }, hist.slice(0, 24).map(dte => el("div", { class: "row" },
-              el("div", { class: "main" }, el("span", { class: "title", style: "font-size:15.5px", text: formatDate(dte) })),
-              el("button", { class: "linkbtn", style: "color:var(--muted)", "aria-label": `Remove ${formatDate(dte)}`, onclick: () => {
-                all[p.id] = { ...p, contacts: hist.filter(x => x !== dte), updatedAt: new Date().toISOString() }; saveAll(all); render();
-              } }, "Remove"))))
+              el("div", { class: "main" },
+                datePick(formatDate(dte), { value: dte, max: today(), className: "datelink", ariaLabel: `Change ${formatDate(dte)}` },
+                  d => setContacts(hist.map(x => x === dte ? d : x)))),
+              el("button", { class: "linkbtn", style: "color:var(--muted)", "aria-label": `Remove ${formatDate(dte)}`, onclick: () => setContacts(hist.filter(x => x !== dte)) }, "Remove"))))
           : el("p", { class: "muted small", text: "None logged yet." })));
 
       const del = el("div", { class: "tools" });

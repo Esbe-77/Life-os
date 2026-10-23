@@ -2,27 +2,21 @@
 // the weekly review, who to reach out to, and decisions waiting on you.
 // It owns the habits list; everything else it reads from the other modules.
 //
-// Data (store key "habits"):
-//   { habits: [ { id, name, createdAt, done: ["YYYY-MM-DD", ...] } ] }
+// Habit data and the habit settings page live in js/habits.js.
 
 import * as store from "../store.js";
 import * as backup from "../backup.js";
-import { el, isoDate, addDays, parseDate, formatDate } from "../ui.js";
+import { el, addDays, parseDate, formatDate } from "../ui.js";
+import { loadHabits, saveHabits, habitsSection, renderHabitPage, tickTimers, getHabit } from "../habits.js";
 import review from "./weekly-review.js";
 import decisions from "./decisions.js";
 import people from "./people.js";
 import energy from "./energy.js";
 
 const ID = "home";
-const KEY = "habits";
-const SUGGESTED = ["Move for 20 minutes", "Read", "Get outside", "Phone out of the bedroom"];
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const LONG_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-const today = () => isoDate(new Date());
-const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-function loadHabits() { const d = store.load(KEY, { habits: [] }); return Array.isArray(d.habits) ? d.habits : []; }
-function saveHabits(habits) { return store.save(KEY, { habits }); }
 
 function greeting() {
   const h = new Date().getHours();
@@ -37,8 +31,9 @@ export default {
   icon: "home",
   color: "var(--accent)",
 
-  title() { return greeting(); },
-  subtitle() { const d = new Date(); return `${DAYS[d.getDay()]} ${d.getDate()} ${LONG_MONTHS[d.getMonth()]}`; },
+  title(view) { return view.startsWith("habit/") ? (getHabit(view.slice(6))?.name || "Habit") : greeting(); },
+  backTo(view) { return view ? "home" : null; },
+  subtitle(view) { if (view) return ""; const d = new Date(); return `${DAYS[d.getDay()]} ${d.getDate()} ${LONG_MONTHS[d.getMonth()]}`; },
   hasData() { return loadHabits().length > 0; },
 
   exportData() { return { habits: loadHabits() }; },
@@ -49,7 +44,7 @@ export default {
     for (const h of data.habits) {
       if (!h?.id || !h.name) continue;
       const m = mine.find(x => x.id === h.id);
-      if (!m) { mine.push({ id: h.id, name: h.name, createdAt: h.createdAt || new Date().toISOString(), done: (h.done || []).slice() }); added++; continue; }
+      if (!m) { mine.push({ ...h, createdAt: h.createdAt || new Date().toISOString(), done: (h.done || []).slice(), timerEndsAt: null }); added++; continue; }
       const merged = [...new Set([...(m.done || []), ...(h.done || [])])].sort();
       if (merged.length !== (m.done || []).length) { m.done = merged; added++; } else kept++;
     }
@@ -57,13 +52,16 @@ export default {
     return { added, kept, noun: ["habit", "habits"] };
   },
 
-  mount(root, { navigate, refreshChrome }) {
+  mount(root, { view, navigate, refreshChrome }) {
     let editing = false;
 
     function render() {
+      const y = window.scrollY;
       root.replaceChildren();
-      const sections = [sundayNudge(), habitsSection(), energySection(), prioritiesSection(), peopleSection(), decisionsSection(), backupNudge()];
+      if (view.startsWith("habit/")) { renderHabitPage(root, view.slice(6), navigate); return; }
+      const sections = [sundayNudge(), habitsSection(render), energySection(), prioritiesSection(), peopleSection(), decisionsSection(), backupNudge()];
       sections.forEach(s => s && root.append(s));
+      window.scrollTo(0, y);
     }
 
     // ----- weekly review nudge (Sundays, and Mondays if it was missed) -----
@@ -76,69 +74,6 @@ export default {
         el("span", { class: "mono", style: "color:var(--m-review)", text: dow === 0 ? "IT'S SUNDAY" : "STILL TIME" }),
         el("h2", { style: "font-size:21px", text: "Your weekly review" }),
         el("p", { class: "small muted", text: "Five questions, about ten minutes." }));
-    }
-
-    // ----- habits -----
-    function habitsSection() {
-      const habits = loadHabits();
-      const t = today();
-      const sec = el("section", { class: "section" });
-      sec.append(el("div", { class: "rowhead" },
-        el("h2", { text: "Today's habits" }),
-        habits.length || editing ? el("button", { class: "linkbtn", onclick: () => { editing = !editing; render(); } }, editing ? "Done" : "Edit") : null));
-
-      if (!habits.length && !editing) {
-        sec.append(el("div", { class: "card", style: "gap:10px" },
-          el("p", { class: "small", text: "A few small things you'd like to do most days. Tap to tick them off. Pick one to start, or write your own." }),
-          el("div", { class: "chips" }, SUGGESTED.map(name => el("button", { class: "chip", onclick: () => { addHabit(name); render(); } }, "+ " + name))),
-          el("button", { class: "linkbtn", style: "align-self:flex-start", onclick: () => { editing = true; render(); } }, "Write your own")));
-        return sec;
-      }
-
-      const rows = el("div", { class: "rows" });
-      habits.forEach(h => {
-        const doneToday = (h.done || []).includes(t);
-        const last7 = el("div", { "aria-hidden": "true", style: "display:flex;gap:3px" });
-        for (let i = 6; i >= 0; i--) {
-          const d = addDays(t, -i);
-          last7.append(el("i", { style: `width:7px;height:7px;border-radius:50%;background:${(h.done || []).includes(d) ? "var(--m-habits)" : "var(--line)"}` }));
-        }
-        const count7 = (h.done || []).filter(d => d > addDays(t, -7)).length;
-        if (editing) {
-          rows.append(el("div", { class: "row" },
-            el("div", { class: "main" }, el("span", { class: "title", text: h.name })),
-            el("button", { class: "linkbtn", style: "color:var(--q-drop)", onclick: () => { saveHabits(loadHabits().filter(x => x.id !== h.id)); render(); } }, "Remove")));
-        } else {
-          rows.append(el("button", {
-            class: "row", style: "width:100%;border-left:0;border-right:0;border-bottom:0;background:none;text-align:left",
-            "aria-pressed": String(doneToday), "aria-label": `${h.name}, ${doneToday ? "done today" : "not done yet"}`,
-            onclick: () => {
-              const all = loadHabits(), x = all.find(y => y.id === h.id);
-              x.done = doneToday ? x.done.filter(d => d !== t) : [...(x.done || []), t].sort();
-              saveHabits(all); render();
-            },
-          },
-            el("span", { style: `width:24px;height:24px;border-radius:50%;flex:none;display:grid;place-items:center;border:2px solid var(--m-habits);${doneToday ? "background:var(--m-habits);color:var(--paper)" : ""}`, text: doneToday ? "✓" : "" }),
-            el("div", { class: "main" },
-              el("span", { class: "title", style: doneToday ? "color:var(--muted)" : "", text: h.name }),
-              el("span", { class: "meta", text: `${count7} of the last 7 days` })),
-            last7));
-        }
-      });
-      if (habits.length) sec.append(rows);
-      if (editing) {
-        const input = el("input", { type: "text", id: "habit-new", placeholder: "A small daily habit", maxlength: 40, autocomplete: "off", style: "flex:1;min-width:0" });
-        const add = () => { if (input.value.trim()) { addHabit(input.value.trim()); render(); document.getElementById("habit-new")?.focus(); } };
-        input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
-        sec.append(el("div", { class: "tools", style: "flex-wrap:nowrap" }, input, el("button", { class: "btn", onclick: add }, "Add")));
-        if (habits.length >= 5) sec.append(el("p", { class: "small muted", text: "Fewer habits are easier to keep. Three to five is plenty." }));
-      }
-      return sec;
-    }
-    function addHabit(name) {
-      const habits = loadHabits();
-      habits.push({ id: newId(), name, createdAt: new Date().toISOString(), done: [] });
-      saveHabits(habits);
     }
 
     // ----- priorities from the latest review -----
@@ -211,11 +146,12 @@ export default {
 
     render();
     const offs = ["habits", "weekly-review", "people", "decisions", "energy"].map(k => store.onChange(k, render));
+    const stopTimers = tickTimers(root, () => render());
     const tick = () => { if (document.visibilityState === "visible") { render(); refreshChrome(); } };
     document.addEventListener("visibilitychange", tick);
     return {
-      setView() { render(); },
-      unmount() { offs.forEach(f => f()); document.removeEventListener("visibilitychange", tick); },
+      setView(v) { view = v; render(); window.scrollTo(0, 0); },
+      unmount() { offs.forEach(f => f()); stopTimers(); document.removeEventListener("visibilitychange", tick); },
     };
   },
 };

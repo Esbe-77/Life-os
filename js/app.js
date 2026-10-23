@@ -5,7 +5,8 @@
 
 import * as store from "./store.js";
 import * as backup from "./backup.js";
-import { $, el } from "./ui.js";
+import * as reminders from "./reminders.js";
+import { $, el, timePick } from "./ui.js";
 import { MODULES, TABS } from "./modules/index.js";
 
 const ICONS = {
@@ -24,7 +25,7 @@ export const icon = name => {
   return s;
 };
 
-const SETTINGS = { id: "settings", name: "Settings", mount: mountSettings };
+const SETTINGS = { id: "settings", name: "Settings", mount: mountSettings, backTo: () => "home" };
 const byId = id => MODULES.find(m => m.id === id) || (id === "settings" ? SETTINGS : null);
 
 const viewEl = $("#view");
@@ -65,15 +66,21 @@ function renderChrome() {
   headEl.replaceChildren();
   const title = module.title ? module.title(view) : module.name;
   const sub = module.subtitle ? module.subtitle(view) : "";
-  headEl.append(el("h1", {}, title, sub ? el("span", { class: "sub", text: sub }) : null));
-  if (module.id === "home") {
-    const a = el("a", { class: "iconbtn", href: "#/settings", "aria-label": "Settings and backup" });
-    a.append(icon("settings"));
-    headEl.append(a);
-  } else if (module.backTo?.(view)) {
-    const a = el("a", { class: "iconbtn", href: "#/" + module.backTo(view), "aria-label": "Back" });
+  const h1 = el("h1", {}, title, sub ? el("span", { class: "sub", text: sub }) : null);
+  const back = module.backTo?.(view);
+  headEl.classList.toggle("detail", !!back);
+  if (back) {
+    // Detail pages: back on the left, the name centred.
+    const a = el("a", { class: "iconbtn", href: "#/" + back, "aria-label": "Back" });
     a.append(icon("back"));
-    headEl.append(a);
+    headEl.append(a, h1, el("span", { "aria-hidden": "true" }));
+  } else {
+    headEl.append(h1);
+    if (module.id === "home") {
+      const a = el("a", { class: "iconbtn", href: "#/settings", "aria-label": "Settings and backup" });
+      a.append(icon("settings"));
+      headEl.append(a);
+    }
   }
 
   // Sub-views (e.g. "This week" / "Look back")
@@ -126,7 +133,23 @@ function mountSettings(root) {
       : "Install the app to your home screen so your phone treats its data as permanent.";
   })();
 
+  const rr = store.getMeta().reviewReminder || { on: false, time: "18:00" };
+  const reminderCard = reminders.canNotify() ? el("section", { class: "card" },
+    el("h2", { style: "font-size:20px;font-weight:500", text: "Reminders" }),
+    el("div", { class: "row", style: "padding:0;border:0" },
+      el("div", { class: "main" },
+        el("span", { class: "title", text: "Weekly review on Sundays" }),
+        el("span", { class: "meta" }, rr.on ? "At " : "Off", rr.on ? timePick(rr.time, { value: rr.time, className: "datelink", ariaLabel: "Change the weekly review reminder time" }, t => {
+          store.setMeta({ reviewReminder: { on: true, time: t } }); root.replaceChildren(); mountSettings(root);
+        }) : null)),
+      el("button", { class: "btn small", "aria-pressed": String(rr.on), onclick: () => {
+        if (!rr.on) reminders.askPermission();
+        store.setMeta({ reviewReminder: { ...rr, on: !rr.on } }); root.replaceChildren(); mountSettings(root);
+      } }, rr.on ? "Turn off" : "Turn on")),
+    el("p", { class: "small muted", text: "Decisions also remind you on their check-in day, at 9am. Habit reminders are set on each habit: tap its name on Home." })) : null;
+
   root.append(
+    reminderCard,
     el("section", { class: "card" },
       el("h2", { style: "font-size:20px;font-weight:500", text: "Backup" }),
       el("p", { class: "small", text: "Everything you write stays on this phone. Nothing is sent anywhere. Save a backup now and then (to Google Drive, for example) so a lost or reset phone doesn't mean lost years." }),
@@ -158,5 +181,9 @@ window.addEventListener("hashchange", route);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && current) renderChrome(); });
 store.requestPersistence();
 route();
+// Keep the phone's reminders in step with what's saved.
+let syncTimer = null;
+store.onAnySave(() => { clearTimeout(syncTimer); syncTimer = setTimeout(reminders.syncReminders, 400); });
+reminders.syncReminders();
 // The Android app ships its files inside the APK, so it needs no offline cache.
 if ("serviceWorker" in navigator && !window.LifeOSAndroid) navigator.serviceWorker.register("sw.js").catch(() => {});

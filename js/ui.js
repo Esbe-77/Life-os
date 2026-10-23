@@ -29,3 +29,22 @@ export const addDays = (s, n) => { const d = parseDate(s); d.setDate(d.getDate()
 export function formatDate(s) { const d = parseDate(s); return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; }
 
 export const prefersReducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// A tappable label that opens the phone's date picker. Choosing a date (or
+// tapping Set) calls onPick("YYYY-MM-DD") straight away.
+export function datePick(label, { value = "", max = "", className = "btn", ariaLabel = "" } = {}, onPick) {
+  const input = el("input", { type: "date", class: "date-pick-input", value, max: max || null, "aria-label": ariaLabel || label });
+  input.addEventListener("change", () => { if (input.value) onPick(input.value); });
+  return el("label", { class: className + " date-pick" }, el("span", { text: label }), input);
+}
+
+// Same idea for a time of day ("HH:MM").
+export function timePick(label, { value = "", className = "btn", ariaLabel = "" } = {}, onPick) {
+  const input = el("input", { type: "time", class: "date-pick-input", value, "aria-label": ariaLabel || label });
+  input.addEventListener("change", () => { if (input.value) onPick(input.value); });
+  return el("label", { class: className + " date-pick" }, el("span", { text: label }), input);
+}
+
+// Monday-first week helpers. Days are numbered like Date.getDay(): 0 = Sunday.
+export const WEEKDAYS = [[1, "Mon"], [2, "Tue"], [3, "Wed"], [4, "Thu"], [5, "Fri"], [6, "Sat"], [0, "Sun"]];
+export function weekStart(iso) { const d = parseDate(iso); return addDays(iso, -((d.getDay() + 6) % 7)); }

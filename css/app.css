@@ -71,6 +71,8 @@ button { cursor: pointer; }
 .app { max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; padding-top: 16px; }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; }
 .page-head h1 { font-size: 26px; font-weight: 700; letter-spacing: -.01em; }
+.page-head.detail { display: grid; grid-template-columns: 40px 1fr 40px; }
+.page-head.detail h1 { text-align: center; font-size: 22px; overflow-wrap: anywhere; }
 .page-head .sub { display: block; font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-weight: 400; letter-spacing: .03em; margin-top: 4px; }
 .view { display: flex; flex-direction: column; gap: 20px; }
 
@@ -138,6 +140,12 @@ textarea { min-height: 96px; resize: vertical; }
 input:focus, textarea:focus, select:focus { border-color: var(--fc, var(--accent)); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--fc, var(--accent)) 18%, transparent); }
 .search { background: var(--paper); }
 
+/* a label that opens the date picker when tapped */
+.date-pick { position: relative; cursor: pointer; }
+.date-pick .date-pick-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; padding: 0; border: 0; cursor: pointer; }
+.date-pick .date-pick-input::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.datelink { color: var(--ink); font-family: var(--font-display); font-size: 15.5px; text-decoration: underline dotted; text-underline-offset: 4px; text-decoration-color: var(--muted); }
+
 /* list rows */
 .rows { display: flex; flex-direction: column; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
 .row { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-top: 1px solid var(--line); min-width: 0; color: inherit; text-decoration: none; }
@@ -158,6 +166,26 @@ a.main { color: inherit; text-decoration: none; }
 /* bar for comparisons */
 .meter { height: 8px; border-radius: 4px; background: var(--line); position: relative; overflow: hidden; }
 .meter > i { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: var(--mc, var(--accent)); }
+
+/* ---------- habits ---------- */
+.hb-check { width: 30px; height: 30px; border-radius: 50%; flex: none; display: grid; place-items: center; border: 2px solid var(--m-habits); background: none; color: var(--paper); font-size: 15px; padding: 0; }
+.hb-check.on { background: var(--m-habits); }
+.hb-timer { flex: none; font-variant-numeric: tabular-nums; }
+.hb-timer.running { border-color: var(--m-habits); color: var(--m-habits); }
+
+/* ---------- decisions ---------- */
+.dj-prompt { text-decoration: none; color: inherit; gap: 6px; border-color: color-mix(in srgb, var(--m-decisions) 40%, var(--line)); }
+.dj-prompt-q { font-family: var(--font-display); font-size: 21px; color: var(--m-decisions); }
+.dj-option.leading { border-color: var(--q-well); }
+.dj-option .dj-optname { font-family: var(--font-display); font-size: 19px; background: transparent; border-color: transparent; padding: 4px 6px; margin-left: -6px; flex: 1; min-width: 0; }
+.dj-items { display: flex; flex-direction: column; gap: 6px; }
+.dj-items-head { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--ic); }
+.dj-item { display: flex; align-items: center; gap: 8px; padding: 4px 0 4px 10px; border-left: 3px solid color-mix(in srgb, var(--ic) 45%, transparent); }
+.dj-item.big { border-left-color: var(--ic); }
+.dj-item-text { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 16px; }
+.dj-item .linkbtn { text-decoration: none; font-size: 20px; padding: 0 6px; }
+.dj-star { border: 0; background: none; padding: 0 2px; font-size: 18px; color: var(--ic); line-height: 1; }
+.dj-weighed summary { font-family: var(--font-display); font-size: 17px; cursor: pointer; }
 
 /* ---------- weekly review ---------- */
 .wr-weekbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

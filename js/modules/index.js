@@ -7,5 +7,5 @@ import decisions from "./decisions.js";
 import people from "./people.js";
 import energy from "./energy.js";
 
-export const MODULES = [home, weeklyReview, decisions, people, energy];
+export const MODULES = [home, energy, people, decisions, weeklyReview];
 export const TABS = MODULES;

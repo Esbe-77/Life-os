@@ -19,7 +19,9 @@ css/app.css           all styles; colour tokens at the top (light + dark)
 js/app.js             router (#/<moduleId>/<view>), tab bar, settings page
 js/store.js           on-device storage: one JSON document per module in localStorage ("lifeos.v1.<id>")
 js/backup.js          one backup file for everything; restore; share/download
-js/ui.js              el() DOM helper, date helpers ("YYYY-MM-DD" local dates)
+js/ui.js              el() DOM helper, date/time pickers, date helpers ("YYYY-MM-DD" local dates)
+js/habits.js          habits on Home: days, reminders, timers, and the habit settings page
+js/reminders.js       builds the phone's reminder list (habits, Sunday review, decision check-ins) and sends it to the app
 js/modules/index.js   module list, in tab-bar order
 js/modules/*.js       home (dashboard + habits), weekly-review, decisions, people, energy
 sw.js                 offline cache (web install only; the Android app skips it)
@@ -30,7 +32,8 @@ android/              native shell: one WebView serving the web files from the A
 ## Android app
 
 - The page is served at `https://appassets.androidplatform.net/assets/www/`. Never change that address or the `applicationId`: the saved data is tied to both.
-- `window.LifeOSAndroid` exists only inside the app. It provides `saveFile(name, text, mime)`, which reports back through `window.__lifeosSaveResult`, and `version()`.
+- `window.LifeOSAndroid` exists only inside the app. It provides `saveFile(name, text, mime)`, which reports back through `window.__lifeosSaveResult`, plus `version()`, `setReminders(json)`, `startTimer(id, seconds, title, text)`, `cancelTimer(id)` and `requestNotifications()`.
+- Reminders: the page always sends the whole list (`js/reminders.js`) after any save. `Reminders.java` books only the next time of each with AlarmManager and books the following one when it fires. `BootReceiver` books them again after a restart or an update.
 - File pickers (`<input type=file>`) work through `onShowFileChooser` in `MainActivity`.
 - Releases must be signed with the same key (the repo secrets), or updates won't install over the old version.
 

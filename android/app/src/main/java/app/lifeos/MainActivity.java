@@ -1,9 +1,12 @@
 package app.lifeos;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
@@ -93,7 +96,20 @@ public class MainActivity extends Activity {
         });
 
         if (savedInstanceState != null) web.restoreState(savedInstanceState);
-        else web.loadUrl(START_URL);
+        else web.loadUrl(START_URL + routeFrom(getIntent()));
+    }
+
+    // A tapped notification says where to open, e.g. "#/weekly-review".
+    private static String routeFrom(Intent intent) {
+        String r = intent == null ? null : intent.getStringExtra("route");
+        return r != null && r.matches("#/[A-Za-z0-9/_-]*") ? r : "";
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        String r = routeFrom(intent);
+        if (!r.isEmpty()) web.evaluateJavascript("location.hash = '" + r + "'", null);
     }
 
     @Override
@@ -153,6 +169,31 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String version() {
             return BuildConfig.VERSION_NAME;
+        }
+
+        /** The whole list of reminders, as JSON (see Reminders). */
+        @JavascriptInterface
+        public void setReminders(String json) {
+            Reminders.setAll(getApplicationContext(), json);
+        }
+
+        @JavascriptInterface
+        public void startTimer(String id, int seconds, String title, String text) {
+            Reminders.startTimer(getApplicationContext(), id, seconds, title, text);
+        }
+
+        @JavascriptInterface
+        public void cancelTimer(String id) {
+            Reminders.cancelTimer(getApplicationContext(), id);
+        }
+
+        /** Asks for permission to show notifications (Android 13+), once. */
+        @JavascriptInterface
+        public void requestNotifications() {
+            if (Build.VERSION.SDK_INT >= 33
+                    && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                runOnUiThread(() -> requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 7));
+            }
         }
     }
 }

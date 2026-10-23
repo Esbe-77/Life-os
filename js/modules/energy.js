@@ -93,7 +93,7 @@ export default {
       return ok;
     }
 
-    function render() { root.replaceChildren(); view === "patterns" ? renderPatterns() : renderCheckin(); }
+    function render() { const y = window.scrollY; root.replaceChildren(); view === "patterns" ? renderPatterns() : renderCheckin(); window.scrollTo(0, y); }
 
     // ----- check in -----
     function scale(key, words, color) {
@@ -107,12 +107,20 @@ export default {
 
     function renderCheckin() {
       const msg = el("span", { class: "savestate", "aria-live": "polite" });
-      const tagBox = el("div", { class: "chips" });
-      data.tags.forEach(t => {
+      const tagBox = el("div", { class: editingTags ? "rows" : "chips" });
+      const move = (i, by) => {
+        const j = i + by; if (j < 0 || j >= data.tags.length) return;
+        [data.tags[i], data.tags[j]] = [data.tags[j], data.tags[i]]; save(); render();
+      };
+      data.tags.forEach((t, i) => {
         if (editingTags) {
-          tagBox.append(el("button", { type: "button", class: "chip", "aria-label": `Remove tag ${t}`, onclick: () => {
-            data.tags = data.tags.filter(x => x !== t); pick.tags.delete(t); save(); render();
-          } }, t, " ×"));
+          tagBox.append(el("div", { class: "row", style: "padding:6px 8px 6px 14px" },
+            el("div", { class: "main" }, el("span", { class: "title", style: "font-size:15.5px", text: t })),
+            el("button", { type: "button", class: "iconbtn", disabled: i === 0, "aria-label": `Move ${t} up`, onclick: () => move(i, -1) }, "↑"),
+            el("button", { type: "button", class: "iconbtn", disabled: i === data.tags.length - 1, "aria-label": `Move ${t} down`, onclick: () => move(i, 1) }, "↓"),
+            el("button", { type: "button", class: "linkbtn", style: "color:var(--q-drop);padding:0 6px", "aria-label": `Remove tag ${t}`, onclick: () => {
+              data.tags = data.tags.filter(x => x !== t); pick.tags.delete(t); save(); render();
+            } }, "Remove")));
         } else {
           tagBox.append(el("button", { type: "button", class: "chip", "aria-pressed": String(pick.tags.has(t)), onclick: () => {
             pick.tags.has(t) ? pick.tags.delete(t) : pick.tags.add(t); render();
@@ -133,7 +141,7 @@ export default {
         el("div", { class: "field" }, el("span", { class: "field-label", text: "Mood" }), scale("mood", MOOD_WORDS)),
         el("div", { class: "field" },
           el("div", { class: "rowhead" },
-            el("span", { class: "field-label", text: editingTags ? "Tap a tag to remove it" : "Anything going on? (optional)" }),
+            el("span", { class: "field-label", text: editingTags ? "Reorder or remove tags" : "Anything going on? (optional)" }),
             el("button", { class: "linkbtn", onclick: () => { editingTags = !editingTags; render(); } }, editingTags ? "Done" : "Edit tags")),
           tagBox,
           editingTags ? el("div", { class: "tools", style: "flex-wrap:nowrap" }, newTag, el("button", { class: "btn small", onclick: addTag }, "Add")) : null),
@@ -265,7 +273,7 @@ export default {
     render();
     const off = store.onChange(ID, () => { data = loadData(); render(); });
     return {
-      setView(v) { view = v; data = loadData(); render(); },
+      setView(v) { view = v; data = loadData(); render(); window.scrollTo(0, 0); },
       unmount() { off(); },
     };
   },
