@@ -26,11 +26,17 @@ function daysSince(p) {
 }
 // 1 or more means it's time; unknown last contact counts as time.
 function urgency(p) { const d = daysSince(p); return d == null ? 1.5 : d / (p.every || 30); }
+// Four colours, from in touch to long overdue (twice the gap you wanted, or
+// never logged).
+const LEVELS = [
+  { key: "ok", label: "In touch", color: "var(--p-ok)" },
+  { key: "soon", label: "Soon", color: "var(--p-soon)" },
+  { key: "due", label: "Time to reach out", color: "var(--p-due)" },
+  { key: "long", label: "It's been a long time", color: "var(--p-long)" },
+];
 function status(p) {
   const u = urgency(p);
-  if (u >= 1) return { key: "due", label: "Time to reach out", color: "var(--m-people)" };
-  if (u >= 0.75) return { key: "soon", label: "Soon", color: "var(--q-drained)" };
-  return { key: "ok", label: "In touch", color: "var(--q-well)" };
+  return LEVELS[u >= 1.5 ? 3 : u >= 1 ? 2 : u >= 0.75 ? 1 : 0];
 }
 function sinceText(p) {
   const d = daysSince(p);
@@ -72,6 +78,7 @@ export default {
   hasData() { return list(loadAll()).length > 0; },
   due() { return list(loadAll()).filter(p => urgency(p) >= 1).sort(byUrgency); },
   sinceText,
+  status,
   logToday(id) { const all = loadAll(); if (all[id]) logToday(all, id); },
 
   exportData() { return { people: list(loadAll()) }; },
@@ -127,6 +134,9 @@ export default {
           ? `It's been a while with ${joinNames(firstNames)}${due.length > 3 ? ` and ${due.length - 3} more` : ""}. A short message counts.`
           : "You're in touch with everyone on your list."));
 
+      const counts = LEVELS.map(l => [l, people.filter(p => status(p).key === l.key).length]).filter(([, n]) => n);
+      root.append(el("div", { class: "pp-legend", "aria-label": "Colour key" }, counts.map(([l, n]) =>
+        el("span", { style: `--pc:${l.color}` }, el("i"), `${n} ${l.label.toLowerCase()}`))));
       const rows = el("div", { class: "rows" });
       people.forEach(p => rows.append(personRow(p)));
       root.append(rows);
@@ -148,15 +158,18 @@ export default {
                   all[p.id] = { ...all[p.id], contacts: prev }; saveAll(all); render();
                 } }, "Undo"));
               meta.textContent = `${sinceText(p)} · every ${everyLabel(p.every)}`;
-              dot.style.background = "var(--q-well)";
+              row.className = "row pp-row ok"; row.style.setProperty("--pc", "var(--p-ok)"); bar.style.width = "0%";
             } }, "Talked today"));
       const meta = el("span", { class: "meta", text: `${sinceText(p)} · every ${everyLabel(p.every)}` });
-      const dot = el("span", { "aria-hidden": "true", style: `width:9px;height:9px;border-radius:50%;flex:none;background:${st.color}` });
+      const u = urgency(p);
+      const bar = el("i", { style: `width:${Math.min(u, 1) * 100}%` });
       drawIdle();
-      return el("div", { class: "row", title: st.label },
-        dot,
-        el("a", { class: "main", href: `#/${ID}/${p.id}` }, el("span", { class: "title", text: p.name }), meta),
+      const row = el("div", { class: `row pp-row ${st.key}`, style: `--pc:${st.color}`, title: st.label },
+        el("a", { class: "main", href: `#/${ID}/${p.id}` },
+          el("span", { class: "title", text: p.name }), meta,
+          el("span", { class: "pp-bar", "aria-hidden": "true" }, bar)),
         right);
+      return row;
     }
 
     // ----- add / edit -----

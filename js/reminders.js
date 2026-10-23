@@ -21,6 +21,7 @@ export function syncReminders() {
   for (const h of loadHabits()) {
     if (h.kind !== "do" || !h.reminders.length) continue;
     for (const date of plannedDates(h, today, h.fixed ? addDays(today, 27) : planEnd)) {
+      if (h.done.includes(date)) continue; // already done that day
       for (const r of h.reminders) {
         list.push({ id: `habit-${h.id}-${r.id}-${date}`, title: h.name, text: "A reminder for your habit.", ...at(r.time), date, route: "#/home" });
       }

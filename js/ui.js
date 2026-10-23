@@ -48,3 +48,61 @@ export function timePick(label, { value = "", className = "btn", ariaLabel = "" 
 // Monday-first week helpers. Days are numbered like Date.getDay(): 0 = Sunday.
 export const WEEKDAYS = [[1, "Mon"], [2, "Tue"], [3, "Wed"], [4, "Thu"], [5, "Fri"], [6, "Sat"], [0, "Sun"]];
 export function weekStart(iso) { const d = parseDate(iso); return addDays(iso, -((d.getDay() + 6) % 7)); }
+
+// Hold an item for a moment, then drag it up or down to move it. Items are
+// the list's direct children; an element marked data-drag inside one starts a
+// drag straight away (a handle). onMove(from, to) runs once, on drop, with
+// the indexes before and after. Taps and scrolling work as normal.
+export function sortable(list, onMove, { delay = 380 } = {}) {
+  let timer = null, drag = null, start = null, swallowClick = false;
+  const items = () => [...list.children];
+  const cancelHold = () => { clearTimeout(timer); timer = null; };
+
+  function begin(item, pointerId) {
+    drag = { item, from: items().indexOf(item), pointerId };
+    item.classList.add("dragging");
+    list.classList.add("sorting");
+    try { list.setPointerCapture(pointerId); } catch {}
+    navigator.vibrate?.(12);
+  }
+  function finish(commit) {
+    cancelHold();
+    if (!drag) return;
+    const { item, from } = drag, to = items().indexOf(item);
+    item.classList.remove("dragging"); list.classList.remove("sorting");
+    drag = null; swallowClick = true; setTimeout(() => { swallowClick = false; }, 350);
+    if (commit && to !== from) onMove(from, to);
+    else if (to !== from) { const rest = items().filter(c => c !== item); list.insertBefore(item, rest[from] || null); }
+  }
+
+  list.addEventListener("pointerdown", e => {
+    if (drag || e.button > 0) return;
+    const item = items().find(c => c.contains(e.target));
+    if (!item) return;
+    const handle = e.target.closest("[data-drag]");
+    if (!handle && e.target.closest("button, input, select, textarea, label")) return;
+    start = { x: e.clientX, y: e.clientY };
+    if (handle) { e.preventDefault(); begin(item, e.pointerId); }
+    else timer = setTimeout(() => begin(item, e.pointerId), delay);
+  });
+  list.addEventListener("pointermove", e => {
+    if (!drag) { if (timer && start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 8) cancelHold(); return; }
+    e.preventDefault();
+    const others = items().filter(c => c !== drag.item);
+    const over = others.find(c => { const r = c.getBoundingClientRect(); return e.clientY >= r.top && e.clientY <= r.bottom; });
+    if (!over) return;
+    const r = over.getBoundingClientRect();
+    list.insertBefore(drag.item, e.clientY < r.top + r.height / 2 ? over : over.nextSibling);
+  });
+  list.addEventListener("pointerup", () => finish(true));
+  list.addEventListener("pointercancel", () => finish(false));
+  // While dragging, the page must not scroll, and a long press must not open
+  // the phone's link menu.
+  list.addEventListener("touchmove", e => { if (drag) e.preventDefault(); }, { passive: false });
+  list.addEventListener("contextmenu", e => { if (timer || drag) e.preventDefault(); });
+  list.addEventListener("click", e => { if (swallowClick) { e.preventDefault(); e.stopPropagation(); swallowClick = false; } }, true);
+  return list;
+}
+
+// Moves one entry of an array, returning a new array.
+export function moveItem(arr, from, to) { const a = arr.slice(); const [x] = a.splice(from, 1); a.splice(to, 0, x); return a; }

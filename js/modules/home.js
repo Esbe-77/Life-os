@@ -96,7 +96,8 @@ export default {
           people.logToday(p.id);
           right.replaceChildren(el("span", { class: "pill", style: "--pc:var(--q-well)", text: "Logged" }));
         } }, "Talked today"));
-        rows.append(el("div", { class: "row" },
+        const st = people.status(p);
+        rows.append(el("div", { class: `row pp-row ${st.key}`, style: `--pc:${st.color}` },
           el("a", { class: "main", href: `#/people/${p.id}` }, el("span", { class: "title", text: p.name }), el("span", { class: "meta", text: people.sinceText(p) })),
           right));
       });
