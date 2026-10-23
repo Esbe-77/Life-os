@@ -56,7 +56,8 @@ jobs:
           for f in index.html css/app.css js/app.js js/modules/index.js; do
             unzip -l life-os.apk "assets/www/$f" > /dev/null || { echo "::error::assets/www/$f is missing from the APK"; exit 1; }
           done
-          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs life-os.apk | head -3
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" verify --print-certs life-os.apk | head -3
 
       - uses: actions/upload-artifact@v4
         with:
