@@ -12,11 +12,23 @@ Everything you write stays on your phone. Nothing is sent anywhere. Use **Settin
 
 ## Install on Android
 
-1. In this repo on GitHub, go to **Settings → Pages**. Under "Build and deployment", set Source to **Deploy from a branch**, pick **main** and **/ (root)**, and save. After a minute the app is live at <https://esbe-77.github.io/Life-os/>.
-2. Open that link in **Chrome** on your phone.
-3. Tap **⋮ → Add to Home screen** (or **Install app**).
+### The app (APK), recommended
 
-It now opens from its own icon, full screen, and works offline. Updates arrive automatically: when this repo changes, the app picks up the new version the next time you open it (sometimes the time after).
+1. Download **life-os.apk** from the [latest release](https://github.com/Esbe-77/Life-os/releases/latest) on your phone.
+2. Open it. If Android asks, allow your browser to install unknown apps, then tap **Install**.
+
+To update, install the newer APK the same way. Your data stays. Uninstalling the app deletes its data, so save a backup first.
+
+Every push builds the APK automatically (`.github/workflows/android.yml`). Pushes to `main` publish a numbered release, and pushes to other branches refresh the **preview** pre-release. Publishing needs two repository secrets, set once under **Settings → Secrets and variables → Actions**:
+
+- `LIFEOS_KEYSTORE_BASE64`: the signing key, base64-encoded
+- `LIFEOS_KEYSTORE_PASSWORD`: its password
+
+Keep the key file somewhere safe. Every version must be signed with the same key, or Android won't install it as an update.
+
+### Or as a web app
+
+In **Settings → Pages**, deploy from the **main** branch, **/ (root)**. Then open <https://esbe-77.github.io/Life-os/> in Chrome and tap **⋮ → Add to Home screen**. (Some launchers don't support this, so the APK is the safer route.)
 
 ### Moving over from the Weekly Review web page
 
@@ -24,6 +36,6 @@ On the old page, tap **Download backup (.json)** under "Keep a copy". In Life OS
 
 ## How it's built
 
-Plain HTML, CSS and JavaScript modules. There's no build step and no dependencies, so it will keep working for years without upkeep. See [CLAUDE.md](CLAUDE.md) for the structure and how to add a module.
+Plain HTML, CSS and JavaScript modules. There's no build step and no dependencies, so it will keep working for years without upkeep. The Android app in `android/` is a small native shell: one WebView that serves these same files from inside the APK. See [CLAUDE.md](CLAUDE.md) for the structure and how to add a module.
 
 To run it locally: `python3 -m http.server` in this folder, then open <http://localhost:8000>.
