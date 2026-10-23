@@ -6,7 +6,7 @@
 //     tags: [string] }  the tag choices, in the order shown
 
 import * as store from "../store.js";
-import { el, isoDate, addDays, parseDate, MONTHS } from "../ui.js";
+import { el, isoDate, addDays, parseDate, MONTHS, timePick, sortable, moveItem } from "../ui.js";
 
 const ID = "energy";
 const DEFAULT_TAGS = ["slept well", "slept badly", "exercised", "outside", "saw friends", "scrolled a lot", "caffeine", "alcohol", "worked late", "ate well"];
@@ -86,7 +86,15 @@ export default {
     let data = loadData();
     const pick = { energy: null, mood: null, tags: new Set() };
     let editingTags = false;
+    let editing = null; // the check-in being changed, if any
     let range = 30;
+
+    function startEdit(e) {
+      editing = { id: e.id, at: e.at };
+      pick.energy = e.energy; pick.mood = e.mood; pick.tags = new Set(e.tags || []);
+      render(); window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    function stopEdit() { editing = null; pick.energy = pick.mood = null; pick.tags.clear(); render(); }
 
     function save() {
       const ok = store.save(ID, data);
@@ -107,17 +115,12 @@ export default {
 
     function renderCheckin() {
       const msg = el("span", { class: "savestate", "aria-live": "polite" });
-      const tagBox = el("div", { class: editingTags ? "rows" : "chips" });
-      const move = (i, by) => {
-        const j = i + by; if (j < 0 || j >= data.tags.length) return;
-        [data.tags[i], data.tags[j]] = [data.tags[j], data.tags[i]]; save(); render();
-      };
-      data.tags.forEach((t, i) => {
+      const tagBox = el("div", { class: editingTags ? "rows sortable" : "chips" });
+      data.tags.forEach(t => {
         if (editingTags) {
-          tagBox.append(el("div", { class: "row", style: "padding:6px 8px 6px 14px" },
+          tagBox.append(el("div", { class: "row", style: "padding:4px 8px 4px 4px;gap:6px" },
+            el("span", { class: "drag-handle", "data-drag": "", "aria-hidden": "true", text: "⠿" }),
             el("div", { class: "main" }, el("span", { class: "title", style: "font-size:15.5px", text: t })),
-            el("button", { type: "button", class: "iconbtn", disabled: i === 0, "aria-label": `Move ${t} up`, onclick: () => move(i, -1) }, "↑"),
-            el("button", { type: "button", class: "iconbtn", disabled: i === data.tags.length - 1, "aria-label": `Move ${t} down`, onclick: () => move(i, 1) }, "↓"),
             el("button", { type: "button", class: "linkbtn", style: "color:var(--q-drop);padding:0 6px", "aria-label": `Remove tag ${t}`, onclick: () => {
               data.tags = data.tags.filter(x => x !== t); pick.tags.delete(t); save(); render();
             } }, "Remove")));
@@ -127,6 +130,7 @@ export default {
           } }, t));
         }
       });
+      if (editingTags) sortable(tagBox, (from, to) => { data.tags = moveItem(data.tags, from, to); save(); render(); });
       const newTag = el("input", { type: "text", id: "en-newtag", placeholder: "New tag", maxlength: 24, autocomplete: "off", style: "flex:1;min-width:0" });
       const addTag = () => {
         const t = newTag.value.trim().toLowerCase();
@@ -136,24 +140,44 @@ export default {
       newTag.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addTag(); } });
 
       const ready = pick.energy && pick.mood;
-      root.append(el("section", { class: "card", style: "--fc:var(--m-energy)" },
+      const hhmm = at => { const d = new Date(at); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+      const editHead = editing ? el("div", { class: "rowhead" },
+        el("span", { class: "field-label" }, "Changing the check-in at ",
+          timePick(hhmm(editing.at), { value: hhmm(editing.at), className: "datelink", ariaLabel: "Change the time of this check-in" }, v => {
+            const d = new Date(editing.at); const [h, m] = v.split(":").map(Number); d.setHours(h, m, 0, 0); editing.at = d.toISOString(); render();
+          })),
+        el("button", { class: "linkbtn", style: "color:var(--q-drop)", onclick: () => {
+          data.entries = data.entries.filter(x => x.id !== editing.id); save(); stopEdit();
+        } }, "Delete")) : null;
+      const saveBtn = el("button", { class: "btn primary", disabled: !ready, onclick: () => {
+        if (editing) {
+          const i = data.entries.findIndex(x => x.id === editing.id);
+          if (i >= 0) data.entries[i] = { ...data.entries[i], at: editing.at, energy: pick.energy, mood: pick.mood, tags: [...pick.tags] };
+          data.entries.sort((a, b) => b.at.localeCompare(a.at));
+          if (!save()) { msg.textContent = "Couldn't save. Your phone may be out of storage."; return; }
+          stopEdit();
+          const m = root.querySelector(".savestate"); if (m) m.textContent = "Changed";
+          return;
+        }
+        data.entries.unshift({ id: newId(), at: new Date().toISOString(), energy: pick.energy, mood: pick.mood, tags: [...pick.tags] });
+        if (!save()) { data.entries.shift(); msg.textContent = "Couldn't save. Your phone may be out of storage."; return; }
+        pick.energy = pick.mood = null; pick.tags.clear();
+        render();
+        const m = root.querySelector(".savestate"); if (m) m.textContent = "Saved";
+      } }, editing ? "Save changes" : "Save check-in");
+      root.append(el("section", { class: "card", style: "--fc:var(--m-energy)" + (editing ? ";border-color:var(--m-energy)" : "") },
+        editHead,
         el("div", { class: "field" }, el("span", { class: "field-label", text: "Energy" }), scale("energy", ENERGY_WORDS)),
         el("div", { class: "field" }, el("span", { class: "field-label", text: "Mood" }), scale("mood", MOOD_WORDS)),
         el("div", { class: "field" },
           el("div", { class: "rowhead" },
-            el("span", { class: "field-label", text: editingTags ? "Reorder or remove tags" : "Anything going on? (optional)" }),
+            el("span", { class: "field-label", text: editingTags ? "Hold and drag to reorder" : "Anything going on? (optional)" }),
             el("button", { class: "linkbtn", onclick: () => { editingTags = !editingTags; render(); } }, editingTags ? "Done" : "Edit tags")),
           tagBox,
           editingTags ? el("div", { class: "tools", style: "flex-wrap:nowrap" }, newTag, el("button", { class: "btn small", onclick: addTag }, "Add")) : null),
         el("div", { class: "actions" },
-          msg,
-          el("button", { class: "btn primary", disabled: !ready, onclick: () => {
-            data.entries.unshift({ id: newId(), at: new Date().toISOString(), energy: pick.energy, mood: pick.mood, tags: [...pick.tags] });
-            if (!save()) { data.entries.shift(); msg.textContent = "Couldn't save. Your phone may be out of storage."; return; }
-            pick.energy = pick.mood = null; pick.tags.clear();
-            render();
-            const m = root.querySelector(".savestate"); if (m) m.textContent = "Saved";
-          } }, "Save check-in"))));
+          editing ? el("button", { class: "btn", onclick: stopEdit }, "Cancel") : msg,
+          saveBtn)));
 
       const todays = data.entries.filter(e => dayOf(e) === today());
       root.append(el("section", { class: "section" },
@@ -162,21 +186,25 @@ export default {
           ? el("div", { class: "rows" }, todays.map(entryRow))
           : el("p", { class: "small muted", text: "Nothing yet today. Two or three quick check-ins a day is plenty." })));
 
+      const earlier = data.entries.filter(e => dayOf(e) < today() && dayOf(e) >= addDays(today(), -6));
+      if (earlier.length) root.append(el("details", { class: "en-earlier" },
+        el("summary", { class: "mono muted", text: `Earlier this week · ${earlier.length}` }),
+        el("div", { class: "rows" }, earlier.map(e => entryRow(e, true)))));
+
       const dayCount = days(data.entries).length;
       if (dayCount < MIN_DAYS) root.append(el("p", { class: "small muted", text: `Patterns appear after ${MIN_DAYS} days of check-ins. You're at ${dayCount}.` }));
     }
 
-    function entryRow(e) {
+    function entryRow(e, withDay = false) {
+      const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date(e.at).getDay()];
       return el("div", { class: "row" },
-        el("span", { class: "mono", style: "width:40px", text: timeOf(e) }),
+        el("span", { class: "mono", style: withDay ? "width:40px;line-height:1.3" : "width:40px" }, withDay ? dayName + " " : "", timeOf(e)),
         el("div", { class: "main" },
           el("span", { class: "title", style: "font-size:15.5px" },
             el("span", { style: `color:var(--s${e.energy})`, text: `Energy ${e.energy}` }), "  ·  ",
             el("span", { style: `color:var(--s${e.mood})`, text: `Mood ${e.mood}` })),
           e.tags?.length ? el("span", { class: "meta", text: e.tags.join(", ") }) : null),
-        el("button", { class: "linkbtn", style: "color:var(--muted)", "aria-label": `Delete check-in at ${timeOf(e)}`, onclick: () => {
-          data.entries = data.entries.filter(x => x.id !== e.id); save(); render();
-        } }, "Delete"));
+        el("button", { class: "linkbtn", "aria-label": `Edit the check-in at ${timeOf(e)}`, onclick: () => startEdit(e) }, editing?.id === e.id ? "Editing" : "Edit"));
     }
 
     // ----- patterns -----

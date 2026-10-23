@@ -9,7 +9,8 @@
 //
 // Data (store key "habits"):
 //   { habits: [ { id, name, createdAt, kind: "do" | "break",
-//                 done: ["YYYY-MM-DD", ...],
+//                 done: ["YYYY-MM-DD", ...] (days it was completed),
+//                 target: times a day (1 for most), counts: { "YYYY-MM-DD": n } (when target > 1),
 //                 plans: { "<Monday YYYY-MM-DD>": [0–6] (Date.getDay(), 0 = Sunday) },
 //                 fixed: bool (use the latest plan when a week has none),
 //                 reminders: [ { id, time: "HH:MM" } ],
@@ -20,7 +21,7 @@
 
 import * as store from "./store.js";
 import * as reminders from "./reminders.js";
-import { el, isoDate, addDays, parseDate, timePick, WEEKDAYS, weekStart, MONTHS } from "./ui.js";
+import { el, isoDate, addDays, parseDate, timePick, WEEKDAYS, weekStart, MONTHS, sortable, moveItem } from "./ui.js";
 
 const KEY = "habits";
 const ALL = [0, 1, 2, 3, 4, 5, 6];
@@ -38,7 +39,9 @@ const weekDates = ws => Array.from({ length: 7 }, (_, i) => addDays(ws, i));
 
 // ---------- data ----------
 function normalize(h) {
-  const n = { kind: "do", reminders: [], timerMin: null, timerEndsAt: null, done: [], log: [], fixed: false, ...h };
+  const n = { kind: "do", reminders: [], timerMin: null, timerEndsAt: null, done: [], log: [], fixed: false, target: 1, counts: {}, ...h };
+  n.target = Math.max(1, Math.min(20, Math.round(+n.target) || 1));
+  if (!n.counts || typeof n.counts !== "object") n.counts = {};
   if (n.kind !== "break") n.kind = "do";
   if (!n.plans || typeof n.plans !== "object") {
     n.plans = {};
@@ -73,8 +76,10 @@ export function mergeHabits(incoming) {
     const ids = new Set(m.log.map(e => e.id));
     const log = [...m.log, ...h.log.filter(e => e?.id && !ids.has(e.id))].sort((a, b) => a.at.localeCompare(b.at));
     const plans = { ...h.plans, ...m.plans };
-    if (done.length !== m.done.length || log.length !== m.log.length || Object.keys(plans).length !== Object.keys(m.plans).length) {
-      Object.assign(m, { done, log, plans }); added++;
+    const counts = { ...m.counts };
+    for (const [d, n] of Object.entries(h.counts)) if (!(counts[d] >= n)) counts[d] = n;
+    if (done.length !== m.done.length || log.length !== m.log.length || Object.keys(plans).length !== Object.keys(m.plans).length || JSON.stringify(counts) !== JSON.stringify(m.counts)) {
+      Object.assign(m, { done, log, plans, counts }); added++;
     } else kept++;
   }
   return { mine, added, kept };
@@ -125,20 +130,27 @@ function daysText(days) {
 const weekName = ws => ws === weekStart(today()) ? "this week" : ws > today() ? "next week" : `week of ${shortDate(ws)}`;
 
 // ---------- ticks, timers and logs ----------
-function setDone(id, iso, on) {
-  const h = getHabit(id); if (!h) return;
+// How many times it's been done on a day, and a change of that by one.
+// Reaching the target completes the day.
+export const countOn = (h, iso) => h.counts[iso] ?? (h.done.includes(iso) ? h.target : 0);
+function bump(id, iso, by) {
+  const h = getHabit(id); if (!h) return null;
+  const n = Math.max(0, Math.min(h.target, countOn(h, iso) + by));
+  const counts = { ...h.counts };
+  if (h.target > 1 && n) counts[iso] = n; else delete counts[iso];
   const done = new Set(h.done);
-  on ? done.add(iso) : done.delete(iso);
-  patchHabit(id, { done: [...done].sort() });
+  n >= h.target ? done.add(iso) : done.delete(iso);
+  patchHabit(id, { counts, done: [...done].sort() });
+  return n;
 }
 
-// A finished timer ticks the habit off for the day it ended.
+// A finished timer counts one go on the day it ended.
 export function settleTimers() {
   const now = Date.now();
   for (const h of loadHabits()) {
     if (h.timerEndsAt && new Date(h.timerEndsAt).getTime() <= now) {
-      const d = isoDate(new Date(h.timerEndsAt));
-      patchHabit(h.id, { timerEndsAt: null, done: [...new Set([...h.done, d])].sort() });
+      patchHabit(h.id, { timerEndsAt: null });
+      bump(h.id, isoDate(new Date(h.timerEndsAt)), 1);
     }
   }
 }
@@ -212,15 +224,23 @@ export function habitsSection(rerender) {
 
     const dos = habits.filter(h => h.kind === "do"), breaks = habits.filter(h => h.kind === "break");
     if (dos.length) {
-      const todays = dos.filter(h => isOn(h, t)), others = dos.filter(h => !isOn(h, t));
-      sec.append(el("div", { class: "rows" }, [...todays, ...others].map(h => habitRow(h, isOn(h, t)))));
+      sec.append(sortable(el("div", { class: "rows sortable" }, dos.map(h => habitRow(h, isOn(h, t)))), (from, to) => reorder(dos, from, to)));
     }
     if (breaks.length) {
       sec.append(el("span", { class: "mono muted", style: "margin-top:4px", text: "DOING LESS OF" }));
-      sec.append(el("div", { class: "rows" }, breaks.map(breakRow)));
+      sec.append(sortable(el("div", { class: "rows sortable" }, breaks.map(breakRow)), (from, to) => reorder(breaks, from, to)));
     }
     if (adding) sec.append(addRow());
   };
+
+  // Moves a habit within its list (to do, or to do less of), keeping the other list where it is.
+  function reorder(group, from, to) {
+    const ids = moveItem(group.map(h => h.id), from, to);
+    const byId = new Map(habits.map(h => [h.id, h]));
+    let k = 0;
+    saveHabits(habits.map(h => group.some(g => g.id === h.id) ? byId.get(ids[k++]) : h));
+    rerender();
+  }
 
   function planCard() {
     const ws = planWeek(), missing = needsPlan(ws);
@@ -250,8 +270,10 @@ export function habitsSection(rerender) {
         return el("i", { style: `width:${size}px;height:${size}px;border-radius:50%;${hit ? "background:var(--m-habits)" : on ? "border:1.5px solid var(--m-habits);opacity:.55" : "background:var(--line)"}${d === t ? ";outline:1.5px solid var(--muted);outline-offset:1.5px" : ""}` });
       }));
     const unplanned = !daysFor(h, weekStart(t));
-    const meta = unplanned ? `Not planned this week${done ? ` · ${done} done` : ""}`
-      : onToday ? `${done} of ${planned} this week${h.reminders.length ? " · " + h.reminders.map(r => r.time).sort().join(", ") : ""}`
+    const n = countOn(h, t), multi = h.target > 1;
+    const todayPart = multi && (onToday || n) ? `${n} of ${h.target} today · ` : "";
+    const meta = unplanned ? `${todayPart}Not planned this week${done ? ` · ${done} done` : ""}`
+      : onToday ? `${todayPart}${done} of ${planned} ${multi ? "days " : ""}this week${!multi && h.reminders.length ? " · " + h.reminders.map(r => r.time).sort().join(", ") : ""}`
       : `Not today · ${done} of ${planned} this week${nextOn(h) ? " · next " + nextOn(h) : ""}`;
 
     let timerEl = null;
@@ -264,7 +286,8 @@ export function habitsSection(rerender) {
         timerEl = el("button", { class: "btn small hb-timer", "aria-label": `Start a ${h.timerMin} minute timer for ${h.name}`, onclick: () => {
           const ends = new Date(Date.now() + h.timerMin * 60000).toISOString();
           patchHabit(h.id, { timerEndsAt: ends });
-          reminders.startTimer(h.id, h.timerMin * 60, h.name, `${h.timerMin} minutes done. Ticked off for today.`);
+          const after = Math.min(h.target, n + 1);
+          reminders.startTimer(h.id, h.timerMin * 60, h.name, `${h.timerMin} minutes done. ` + (multi && after < h.target ? `${after} of ${h.target} today.` : "Ticked off for today."));
           rerender();
         } }, `▶ ${h.timerMin} min`);
       }
@@ -272,10 +295,13 @@ export function habitsSection(rerender) {
 
     return el("div", { class: "row", style: onToday || doneToday ? "" : "opacity:.72" },
       el("button", {
-        class: "hb-check" + (doneToday ? " on" : ""), "aria-pressed": String(doneToday),
-        "aria-label": `${h.name}: ${doneToday ? "done today, tap to undo" : "tap when done"}`,
-        onclick: () => { setDone(h.id, t, !doneToday); rerender(); },
-      }, doneToday ? "✓" : ""),
+        class: "hb-check" + (doneToday ? " on" : "") + (multi && n && !doneToday ? " part" : ""), "aria-pressed": String(doneToday),
+        style: multi ? `--p:${(n / h.target) * 100}%` : null,
+        "aria-label": multi
+          ? `${h.name}: ${n} of ${h.target} today. ${doneToday ? "Tap to take one off" : "Tap to add one"}`
+          : `${h.name}: ${doneToday ? "done today, tap to undo" : "tap when done"}`,
+        onclick: () => { bump(h.id, t, doneToday ? -1 : 1); rerender(); },
+      }, doneToday ? "✓" : multi ? String(n) : ""),
       el("a", { class: "main", href: `#/home/habit/${h.id}` },
         el("span", { class: "title", style: doneToday ? "color:var(--muted)" : "", text: h.name }),
         el("span", { class: "meta", text: meta }),
@@ -407,12 +433,39 @@ export function renderHabitPage(root, id, navigate) {
     type: "button", class: "chip", "aria-pressed": String((h.timerMin || null) === v), onclick: () => save({ timerMin: v }),
   }, l)));
 
+  // Times a day
+  const stepper = (value, label, set, min, max) => el("div", { class: "hb-stepper", role: "group", "aria-label": label },
+    el("button", { type: "button", class: "btn small", disabled: value <= min, "aria-label": `${label}: one fewer`, onclick: () => set(value - 1) }, "−"),
+    el("span", { class: "mono", text: String(value) }),
+    el("button", { type: "button", class: "btn small", disabled: value >= max, "aria-label": `${label}: one more`, onclick: () => set(value + 1) }, "+"));
+  const setTarget = v => {
+    // Days already done stay done; today's count is kept within the new target.
+    const counts = {};
+    for (const [d, n] of Object.entries(h.counts)) if (v > 1) counts[d] = Math.min(n, v);
+    save({ target: v, counts });
+  };
+  const n = countOn(h, today());
+  const spread = () => {
+    const from = 9 * 60, to = 21 * 60, k = h.target;
+    const times = Array.from({ length: k }, (_, i) => { const m = Math.round(from + (to - from) * (k === 1 ? 0 : i / (k - 1))); return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`; });
+    reminders.askPermission();
+    save({ reminders: times.map(time => ({ id: newId(), time })) });
+  };
+
   root.append(
     el("section", { class: "card", style: "--fc:var(--m-habits)" },
       el("label", { class: "field" }, el("span", { text: "Habit" }), name),
       el("div", { class: "field" },
         el("span", { class: "field-label", text: `Days ${weekName(ws)}` }),
-        dayChips, fixed)),
+        dayChips, fixed),
+      el("div", { class: "rowhead", style: "align-items:center" },
+        el("div", {},
+          el("span", { class: "field-label", text: "Times a day" }),
+          el("p", { class: "small muted", text: h.target > 1 ? `Done for the day after ${h.target} goes.` : "Once is enough for most habits." })),
+        stepper(h.target, "Times a day", setTarget, 1, 20)),
+      h.target > 1 ? el("div", { class: "rowhead", style: "align-items:center" },
+        el("span", { class: "field-label", text: `Today: ${n} of ${h.target}` }),
+        stepper(n, "Today", v => { bump(id, today(), v - n); redraw(); }, 0, h.target)) : null),
     historyCard(h),
     el("section", { class: "card" },
       el("h2", { style: "font-size:19px;font-weight:500", text: "Reminders" }),
@@ -420,10 +473,12 @@ export function renderHabitPage(root, id, navigate) {
         ? "Your phone will remind you at these times on the days you've planned."
         : "Reminders work in the Android app." }),
       remRows,
-      el("div", { class: "tools" }, addReminder)),
+      el("div", { class: "tools" }, addReminder,
+        h.target > 1 ? el("button", { class: "btn", onclick: spread }, `Spread ${h.target} through the day`) : null),
+      h.target > 1 ? el("p", { class: "small muted", text: `Spreading sets ${h.target} reminders between 9:00 and 21:00. Once you've done all ${h.target}, the rest of the day's reminders stop.` }) : null),
     el("section", { class: "card" },
       el("h2", { style: "font-size:19px;font-weight:500", text: "Timer" }),
-      el("p", { class: "small muted", text: "With a timer, a ▶ button appears next to the habit. When the time is up you'll get a notification, and the habit is ticked off." }),
+      el("p", { class: "small muted", text: h.target > 1 ? "With a timer, a ▶ button appears next to the habit. Each time it runs out you'll get a notification, and it counts as one go." : "With a timer, a ▶ button appears next to the habit. When the time is up you'll get a notification, and the habit is ticked off." }),
       timerChips),
     del);
 }
