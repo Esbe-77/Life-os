@@ -172,6 +172,22 @@ a.main { color: inherit; text-decoration: none; }
 .hb-check.on { background: var(--m-habits); }
 .hb-timer { flex: none; font-variant-numeric: tabular-nums; }
 .hb-timer.running { border-color: var(--m-habits); color: var(--m-habits); }
+.hb-log { flex: none; }
+.hb-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.hb-days .chip { padding: 6px 0; display: flex; flex-direction: column; align-items: center; line-height: 1.15; border-radius: 12px; min-width: 0; }
+.hb-days .chip small { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+.hb-days .chip[aria-pressed="true"] { background: var(--m-habits); border-color: var(--m-habits); color: var(--paper); }
+.hb-days .chip[aria-pressed="true"] small { color: var(--paper); opacity: .85; }
+.hb-history { display: flex; flex-direction: column; gap: 8px; }
+.hb-week { display: grid; grid-template-columns: 56px 1fr 36px; align-items: center; gap: 10px; }
+.hb-week > .mono:last-child { text-align: right; }
+.hb-cells { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.hb-cells i { height: 14px; border-radius: 4px; background: var(--line); opacity: .6; }
+.hb-cells i.on { background: none; border: 1.5px solid var(--m-habits); opacity: .7; }
+.hb-cells i.hit { background: var(--m-habits); opacity: 1; }
+.hb-bars { display: flex; flex-direction: column; gap: 7px; }
+.hb-bar { display: grid; grid-template-columns: 76px 1fr 28px; align-items: center; gap: 10px; }
+.hb-bar > .mono { text-align: right; }
 
 /* ---------- decisions ---------- */
 .dj-prompt { text-decoration: none; color: inherit; gap: 6px; border-color: color-mix(in srgb, var(--m-decisions) 40%, var(--line)); }

@@ -1,43 +1,130 @@
-// Habits, shown on Home. Each habit can run on chosen days of the week,
-// remind you at set times, and have a timer that ticks it off when it ends.
+// Habits, shown on Home. There are two kinds:
+//   "do"    something to do more of. You plan its days each week (on Sunday,
+//           after the review), tick it off, and can add reminders and a timer.
+//   "break" something to do less of. You log each time it happens, and its
+//           page shows when it tends to happen.
+//
+// Weeks run Monday to Sunday. Planning for the next week opens on Sunday at
+// the review time (7pm unless changed in Settings), or once the review is done.
 //
 // Data (store key "habits"):
-//   { habits: [ { id, name, createdAt, done: ["YYYY-MM-DD", ...],
-//                 days: [0–6] (Date.getDay(), 0 = Sunday; missing = every day),
+//   { habits: [ { id, name, createdAt, kind: "do" | "break",
+//                 done: ["YYYY-MM-DD", ...],
+//                 plans: { "<Monday YYYY-MM-DD>": [0–6] (Date.getDay(), 0 = Sunday) },
+//                 fixed: bool (use the latest plan when a week has none),
 //                 reminders: [ { id, time: "HH:MM" } ],
-//                 timerMin: number | null, timerEndsAt: ISO datetime | null } ] }
+//                 timerMin: number | null, timerEndsAt: ISO datetime | null,
+//                 log: [ { id, at: "YYYY-MM-DDTHH:MM", note } ] } ] }
+// Older data had one `days` list instead of `plans`: it becomes this week's
+// plan, so nothing changes until the next week is planned.
 
 import * as store from "./store.js";
 import * as reminders from "./reminders.js";
-import { el, isoDate, addDays, parseDate, timePick, WEEKDAYS, weekStart } from "./ui.js";
+import { el, isoDate, addDays, parseDate, timePick, WEEKDAYS, weekStart, MONTHS } from "./ui.js";
 
 const KEY = "habits";
 const ALL = [0, 1, 2, 3, 4, 5, 6];
-const SUGGESTED = ["Move for 20 minutes", "Read", "Get outside", "Phone out of the bedroom"];
+const SUGGESTED = [["Move for 20 minutes", "do"], ["Read", "do"], ["Get outside", "do"], ["Snacking", "break"], ["People pleasing", "break"]];
 const TIMERS = [[null, "No timer"], [5, "5 min"], [10, "10 min"], [15, "15 min"], [20, "20 min"], [30, "30 min"], [45, "45 min"], [60, "1 hour"]];
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const PARTS = [["Morning", 5, 12], ["Afternoon", 12, 17], ["Evening", 17, 22], ["Night", 22, 29]];
 
+const pad = n => String(n).padStart(2, "0");
 const today = () => isoDate(new Date());
+const nowStamp = () => { const d = new Date(); return `${isoDate(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-const daysOf = h => (h.days?.length ? h.days : ALL);
-const isOn = (h, iso) => daysOf(h).includes(parseDate(iso).getDay());
+const shortDate = iso => { const d = parseDate(iso); return `${d.getDate()} ${MONTHS[d.getMonth()]}`; };
+const weekDates = ws => Array.from({ length: 7 }, (_, i) => addDays(ws, i));
 
+// ---------- data ----------
+function normalize(h) {
+  const n = { kind: "do", reminders: [], timerMin: null, timerEndsAt: null, done: [], log: [], fixed: false, ...h };
+  if (n.kind !== "break") n.kind = "do";
+  if (!n.plans || typeof n.plans !== "object") {
+    n.plans = {};
+    if (Array.isArray(h.days) && h.days.length) n.plans[weekStart(today())] = h.days.slice();
+  }
+  delete n.days;
+  return n;
+}
 export function loadHabits() {
   const d = store.load(KEY, { habits: [] });
-  return (Array.isArray(d.habits) ? d.habits : []).map(h => ({ reminders: [], days: ALL, timerMin: null, timerEndsAt: null, done: [], ...h }));
+  return (Array.isArray(d.habits) ? d.habits : []).filter(h => h?.id).map(normalize);
 }
 export function saveHabits(habits) { return store.save(KEY, { habits }); }
 export function getHabit(id) { return loadHabits().find(h => h.id === id) || null; }
-function patchHabit(id, patch) {
-  const habits = loadHabits().map(h => h.id === id ? { ...h, ...patch } : h);
-  return saveHabits(habits);
-}
-export function addHabit(name) {
+function patchHabit(id, patch) { return saveHabits(loadHabits().map(h => h.id === id ? { ...h, ...patch } : h)); }
+export function addHabit(name, kind = "do") {
   const habits = loadHabits();
-  habits.push({ id: newId(), name, createdAt: new Date().toISOString(), done: [], days: ALL, reminders: [], timerMin: null, timerEndsAt: null });
+  habits.push(normalize({ id: newId(), name, kind, createdAt: new Date().toISOString() }));
   saveHabits(habits);
 }
 
+// Merges a backup's habits in: ticks, plans and log entries are combined.
+export function mergeHabits(incoming) {
+  const mine = loadHabits();
+  let added = 0, kept = 0;
+  for (const raw of incoming) {
+    if (!raw?.id || !raw.name) continue;
+    const h = normalize(raw);
+    const m = mine.find(x => x.id === h.id);
+    if (!m) { mine.push({ ...h, timerEndsAt: null }); added++; continue; }
+    const done = [...new Set([...m.done, ...h.done])].sort();
+    const ids = new Set(m.log.map(e => e.id));
+    const log = [...m.log, ...h.log.filter(e => e?.id && !ids.has(e.id))].sort((a, b) => a.at.localeCompare(b.at));
+    const plans = { ...h.plans, ...m.plans };
+    if (done.length !== m.done.length || log.length !== m.log.length || Object.keys(plans).length !== Object.keys(m.plans).length) {
+      Object.assign(m, { done, log, plans }); added++;
+    } else kept++;
+  }
+  return { mine, added, kept };
+}
+
+// ---------- weeks and plans ----------
+export function resetTime() { return store.getMeta().reviewReminder?.time || "19:00"; }
+
+// The week being planned: this week, or next week from Sunday at the review
+// time (or as soon as Sunday's review is done, if that's earlier).
+export function planWeek(now = new Date()) {
+  const iso = isoDate(now), ws = weekStart(iso);
+  if (now.getDay() !== 0) return ws;
+  const hhmm = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const reviewed = store.load("weekly-review", { reviews: {} }).reviews?.[iso]?.status === "done";
+  return hhmm >= resetTime() || reviewed ? addDays(ws, 7) : ws;
+}
+
+// Planned days for the week starting ws, or null if it hasn't been planned.
+export function daysFor(h, ws) {
+  if (h.plans[ws]) return h.plans[ws];
+  if (!h.fixed) return null;
+  const earlier = Object.keys(h.plans).filter(k => k < ws).sort().pop();
+  return earlier ? h.plans[earlier] : null;
+}
+const isOn = (h, iso) => (daysFor(h, weekStart(iso)) || []).includes(parseDate(iso).getDay());
+export function plannedDates(h, from, to) {
+  const out = [];
+  for (let d = from; d <= to; d = addDays(d, 1)) if (isOn(h, d)) out.push(d);
+  return out;
+}
+const doHabits = () => loadHabits().filter(h => h.kind === "do");
+export const needsPlan = (ws = planWeek()) => doHabits().filter(h => !daysFor(h, ws));
+
+function setPlan(id, ws, days) {
+  const h = getHabit(id); if (!h) return;
+  const plans = { ...h.plans };
+  plans[ws] = [...days].sort();
+  patchHabit(id, { plans });
+}
+function daysText(days) {
+  if (!days?.length) return "No days";
+  if (days.length === 7) return "Every day";
+  if (days.length === 5 && [1, 2, 3, 4, 5].every(x => days.includes(x))) return "Weekdays";
+  if (days.length === 2 && days.includes(0) && days.includes(6)) return "Weekends";
+  return WEEKDAYS.filter(([n]) => days.includes(n)).map(([, l]) => l).join(", ");
+}
+const weekName = ws => ws === weekStart(today()) ? "this week" : ws > today() ? "next week" : `week of ${shortDate(ws)}`;
+
+// ---------- ticks, timers and logs ----------
 function setDone(id, iso, on) {
   const h = getHabit(id); if (!h) return;
   const done = new Set(h.done);
@@ -56,32 +143,54 @@ export function settleTimers() {
   }
 }
 
-function weekSummary(h) {
-  const start = weekStart(today());
-  const dates = Array.from({ length: 7 }, (_, i) => addDays(start, i));
-  const planned = dates.filter(d => isOn(h, d)).length;
+function logOnce(id, at = nowStamp()) {
+  const h = getHabit(id); if (!h) return null;
+  const entry = { id: newId(), at, note: "" };
+  patchHabit(id, { log: [...h.log, entry].sort((a, b) => a.at.localeCompare(b.at)) });
+  return entry;
+}
+function patchEntry(id, entryId, patch) {
+  const h = getHabit(id); if (!h) return;
+  const log = patch ? h.log.map(e => e.id === entryId ? { ...e, ...patch } : e) : h.log.filter(e => e.id !== entryId);
+  patchHabit(id, { log: log.sort((a, b) => a.at.localeCompare(b.at)) });
+}
+const countIn = (h, from, to) => h.log.filter(e => { const d = e.at.slice(0, 10); return d >= from && d <= to; }).length;
+
+function weekSummary(h, ws = weekStart(today())) {
+  const dates = weekDates(ws);
+  if (h.kind === "break") return { dates, count: countIn(h, ws, addDays(ws, 6)) };
+  const planned = (daysFor(h, ws) || []).length;
   const done = dates.filter(d => h.done.includes(d)).length;
   return { dates, planned, done };
 }
+
+// One line per habit for a week (used by the weekly review).
+export function weekLines(ws) {
+  return loadHabits().filter(h => new Date(h.createdAt) <= new Date(addDays(ws, 7))).map(h => {
+    const s = weekSummary(h, ws);
+    if (h.kind === "break") {
+      const before = countIn(h, addDays(ws, -7), addDays(ws, -1));
+      return { name: h.name, text: `${s.count} time${s.count === 1 ? "" : "s"}${before || s.count ? ` (week before: ${before})` : ""}` };
+    }
+    return { name: h.name, text: s.planned ? `${s.done} of ${s.planned} days` : `${s.done} day${s.done === 1 ? "" : "s"}, not planned` };
+  });
+}
+
 function nextOn(h) {
   for (let i = 1; i <= 7; i++) { const d = addDays(today(), i); if (isOn(h, d)) return i === 1 ? "tomorrow" : DAY_NAMES[parseDate(d).getDay()]; }
   return "";
 }
-function daysText(h) {
-  const d = daysOf(h);
-  if (d.length === 7) return "Every day";
-  if (d.length === 5 && [1, 2, 3, 4, 5].every(x => d.includes(x))) return "Weekdays";
-  if (d.length === 2 && d.includes(0) && d.includes(6)) return "Weekends";
-  return WEEKDAYS.filter(([n]) => d.includes(n)).map(([, l]) => l).join(", ");
-}
 const mmss = ms => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+const timeOf = at => at.slice(11, 16);
 
 // ---------- the section on Home ----------
+let justLogged = null; // { habitId, entryId, until } so a mistaken tap can be undone
+
 export function habitsSection(rerender) {
   settleTimers();
   const habits = loadHabits();
   const t = today();
-  let adding = false;
+  let adding = false, addKind = "do";
   const sec = el("section", { class: "section" });
 
   const draw = () => {
@@ -92,24 +201,43 @@ export function habitsSection(rerender) {
 
     if (!habits.length) {
       sec.append(el("div", { class: "card", style: "gap:10px" },
-        el("p", { class: "small", text: "A few small things you'd like to do. Tick them off here. Tap a habit's name to pick its days, add a reminder or a timer." }),
-        el("div", { class: "chips" }, SUGGESTED.map(name => el("button", { class: "chip", onclick: () => { addHabit(name); rerender(); } }, "+ " + name))),
+        el("p", { class: "small", text: "A few small things to do more of, and any you'd like to do less of. Plan the days each Sunday and tick them off here." }),
+        el("div", { class: "chips" }, SUGGESTED.map(([name, kind]) => el("button", { class: "chip", onclick: () => { addHabit(name, kind); rerender(); } }, (kind === "break" ? "− " : "+ ") + name))),
         addRow()));
       return;
     }
 
-    const todays = habits.filter(h => isOn(h, t)), others = habits.filter(h => !isOn(h, t));
-    const rows = el("div", { class: "rows" });
-    [...todays, ...others].forEach(h => rows.append(habitRow(h, isOn(h, t))));
-    sec.append(rows);
+    const plan = planCard();
+    if (plan) sec.append(plan);
+
+    const dos = habits.filter(h => h.kind === "do"), breaks = habits.filter(h => h.kind === "break");
+    if (dos.length) {
+      const todays = dos.filter(h => isOn(h, t)), others = dos.filter(h => !isOn(h, t));
+      sec.append(el("div", { class: "rows" }, [...todays, ...others].map(h => habitRow(h, isOn(h, t)))));
+    }
+    if (breaks.length) {
+      sec.append(el("span", { class: "mono muted", style: "margin-top:4px", text: "DOING LESS OF" }));
+      sec.append(el("div", { class: "rows" }, breaks.map(breakRow)));
+    }
     if (adding) sec.append(addRow());
   };
 
+  function planCard() {
+    const ws = planWeek(), missing = needsPlan(ws);
+    if (!missing.length) return null;
+    const next = ws > t;
+    return el("a", { class: "card", href: "#/home/plan", style: "text-decoration:none;color:inherit;border-color:var(--m-habits);gap:4px;padding:16px 20px" },
+      el("span", { style: "font-family:var(--font-display);font-size:17px", text: next ? "Plan next week's habits" : "Plan this week's habits" }),
+      el("span", { class: "small muted", text: missing.length === 1 ? `Pick the days for ${missing[0].name}.` : `Pick the days for ${missing.length} habits.` }));
+  }
+
   function addRow() {
-    const input = el("input", { type: "text", id: "habit-new", placeholder: "A small habit", maxlength: 40, autocomplete: "off", style: "flex:1;min-width:0" });
-    const add = () => { if (input.value.trim()) { addHabit(input.value.trim()); rerender(); setTimeout(() => document.getElementById("habit-new")?.focus(), 0); } };
+    const input = el("input", { type: "text", id: "habit-new", placeholder: addKind === "do" ? "Something to do more of" : "Something to do less of", maxlength: 40, autocomplete: "off", style: "flex:1;min-width:0" });
+    const add = () => { if (input.value.trim()) { addHabit(input.value.trim(), addKind); rerender(); setTimeout(() => document.getElementById("habit-new")?.focus(), 0); } };
     input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
-    return el("div", { class: "tools", style: "flex-wrap:nowrap" }, input, el("button", { class: "btn", onclick: add }, "Add"));
+    const kinds = el("div", { class: "chips" }, [["do", "Do more"], ["break", "Do less"]].map(([k, l]) =>
+      el("button", { type: "button", class: "chip", "aria-pressed": String(addKind === k), onclick: () => { addKind = k; const v = input.value; draw(); const i = sec.querySelector("#habit-new"); i.value = v; i.focus(); } }, l)));
+    return el("div", { class: "field" }, kinds, el("div", { class: "tools", style: "flex-wrap:nowrap" }, input, el("button", { class: "btn", onclick: add }, "Add")));
   }
 
   function habitRow(h, onToday) {
@@ -118,12 +246,13 @@ export function habitsSection(rerender) {
     const dots = el("span", { "aria-hidden": "true", style: "display:inline-flex;gap:4px;align-items:center" },
       dates.map(d => {
         const on = isOn(h, d), hit = h.done.includes(d);
-        const size = on ? 8 : 4;
+        const size = on || hit ? 8 : 4;
         return el("i", { style: `width:${size}px;height:${size}px;border-radius:50%;${hit ? "background:var(--m-habits)" : on ? "border:1.5px solid var(--m-habits);opacity:.55" : "background:var(--line)"}${d === t ? ";outline:1.5px solid var(--muted);outline-offset:1.5px" : ""}` });
       }));
-    const meta = onToday
-      ? `${done} of ${planned} this week${h.reminders.length ? " · " + h.reminders.map(r => r.time).join(", ") : ""}`
-      : `Not today · next ${nextOn(h)}`;
+    const unplanned = !daysFor(h, weekStart(t));
+    const meta = unplanned ? `Not planned this week${done ? ` · ${done} done` : ""}`
+      : onToday ? `${done} of ${planned} this week${h.reminders.length ? " · " + h.reminders.map(r => r.time).sort().join(", ") : ""}`
+      : `Not today · ${done} of ${planned} this week${nextOn(h) ? " · next " + nextOn(h) : ""}`;
 
     let timerEl = null;
     if (h.timerMin) {
@@ -141,7 +270,7 @@ export function habitsSection(rerender) {
       }
     }
 
-    return el("div", { class: "row", style: onToday ? "" : "opacity:.72" },
+    return el("div", { class: "row", style: onToday || doneToday ? "" : "opacity:.72" },
       el("button", {
         class: "hb-check" + (doneToday ? " on" : ""), "aria-pressed": String(doneToday),
         "aria-label": `${h.name}: ${doneToday ? "done today, tap to undo" : "tap when done"}`,
@@ -153,6 +282,26 @@ export function habitsSection(rerender) {
         dots),
       timerEl);
   }
+
+  function breakRow(h) {
+    const ws = weekStart(t);
+    const todayN = countIn(h, t, t), week = countIn(h, ws, t), last = countIn(h, addDays(ws, -7), addDays(ws, -1));
+    const undo = justLogged?.habitId === h.id && justLogged.until > Date.now() ? justLogged : null;
+    const meta = undo ? `Logged at ${timeOf(getEntry(h, undo.entryId)?.at || nowStamp())}`
+      : `Today ${todayN} · this week ${week} · last week ${last}`;
+    return el("div", { class: "row" },
+      el("a", { class: "main", href: `#/home/habit/${h.id}` },
+        el("span", { class: "title", text: h.name }),
+        el("span", { class: "meta", text: meta })),
+      undo ? el("button", { class: "linkbtn", style: "color:var(--muted)", onclick: () => { patchEntry(h.id, undo.entryId, null); justLogged = null; rerender(); } }, "Undo") : null,
+      el("button", { class: "btn small hb-log", "aria-label": `Log a time: ${h.name}`, onclick: () => {
+        const e = logOnce(h.id);
+        justLogged = { habitId: h.id, entryId: e.id, until: Date.now() + 6000 };
+        rerender();
+        setTimeout(() => { if (justLogged?.entryId === e.id) { justLogged = null; rerender(); } }, 6100);
+      } }, "+ Log"));
+  }
+  const getEntry = (h, id) => getHabit(h.id)?.log.find(e => e.id === id);
 
   draw();
   return sec;
@@ -171,7 +320,45 @@ export function tickTimers(root, onFinish) {
   return () => clearInterval(id);
 }
 
-// ---------- one habit's settings ----------
+// ---------- planning the week (#/home/plan) ----------
+export function planTitle() { return planWeek() > today() ? "Plan next week" : "Plan this week"; }
+
+export function renderPlanPage(root, navigate) {
+  const ws = planWeek();
+  const redraw = () => { const y = window.scrollY; root.replaceChildren(); renderPlanPage(root, navigate); window.scrollTo(0, y); };
+  const habits = doHabits();
+  if (!habits.length) {
+    root.append(el("p", { class: "muted", text: "No habits to plan yet. Add one on Home." }));
+    return;
+  }
+  const prev = addDays(ws, -7);
+  const canCopy = habits.some(h => daysFor(h, prev));
+  const dates = weekDates(ws);
+
+  root.append(...[
+    el("p", { class: "small muted", text: `${shortDate(ws)} to ${shortDate(addDays(ws, 6))}. Tap the days you'll do each one. The plan opens again next Sunday at ${resetTime()}.` }),
+    canCopy ? el("div", { class: "tools" }, el("button", { class: "btn small", onclick: () => {
+      habits.forEach(h => { const d = daysFor(h, prev); if (d && !h.plans[ws]) setPlan(h.id, ws, d); });
+      redraw();
+    } }, "Same as last week")) : null,
+    el("div", { class: "rows" }, habits.map(h => {
+      const days = daysFor(h, ws) || [];
+      return el("div", { class: "row", style: "flex-direction:column;align-items:stretch;gap:10px" },
+        el("div", { class: "rowhead" },
+          el("a", { class: "title", href: `#/home/habit/${h.id}`, style: "color:inherit;text-decoration:none", text: h.name }),
+          el("span", { class: "mono muted", text: days.length ? `${days.length} day${days.length === 1 ? "" : "s"}` : "not planned" })),
+        el("div", { class: "hb-days" }, WEEKDAYS.map(([n, label], i) => el("button", {
+          type: "button", class: "chip", "aria-pressed": String(days.includes(n)), "aria-label": `${DAY_NAMES[n]} ${shortDate(dates[i])}`,
+          onclick: () => { setPlan(h.id, ws, days.includes(n) ? days.filter(x => x !== n) : [...days, n]); redraw(); },
+        }, el("span", { text: label }), el("small", { text: parseDate(dates[i]).getDate() })))));
+    })),
+    el("div", { class: "actions" }, el("button", { class: "btn primary", onclick: () => {
+      habits.forEach(h => { if (!daysFor(h, ws)) setPlan(h.id, ws, []); }); // a habit left blank is planned as a week off
+      navigate("home");
+    } }, "Done"))].filter(Boolean));
+}
+
+// ---------- one habit's page ----------
 export function renderHabitPage(root, id, navigate) {
   const h = getHabit(id);
   if (!h) { root.append(el("p", { class: "muted", text: "That habit isn't on this phone." })); return; }
@@ -181,22 +368,33 @@ export function renderHabitPage(root, id, navigate) {
   const name = el("input", { type: "text", id: "hb-name", value: h.name, maxlength: 40, autocomplete: "off" });
   name.addEventListener("change", () => { if (name.value.trim()) { patchHabit(id, { name: name.value.trim() }); navigate(`home/habit/${id}`); } });
 
-  // Days
-  const days = daysOf(h);
-  const dayChips = el("div", { class: "chips" }, WEEKDAYS.map(([n, label]) => el("button", {
+  const del = el("div", { class: "tools" });
+  const ask = () => del.replaceChildren(
+    el("span", { class: "small", text: `Remove “${h.name}” and its history?` }),
+    el("button", { class: "btn small danger", onclick: () => { reminders.cancelTimer(id); saveHabits(loadHabits().filter(x => x.id !== id)); navigate("home"); } }, "Remove"),
+    el("button", { class: "btn small", onclick: idle }, "Keep"));
+  const idle = () => del.replaceChildren(el("button", { class: "linkbtn", style: "color:var(--muted)", onclick: ask }, "Remove habit"));
+  idle();
+
+  if (h.kind === "break") { renderBreakPage(root, h, name, redraw); root.append(del); return; }
+
+  // Days for the week being planned
+  const ws = planWeek();
+  const days = daysFor(h, ws) || [];
+  const dayChips = el("div", { class: "hb-days" }, WEEKDAYS.map(([n, label], i) => el("button", {
     type: "button", class: "chip", "aria-pressed": String(days.includes(n)),
-    onclick: () => { const next = days.includes(n) ? days.filter(x => x !== n) : [...days, n]; if (next.length) save({ days: next.sort() }); },
-  }, label)));
-  const presets = el("div", { class: "tools" },
-    [["Every day", ALL], ["Weekdays", [1, 2, 3, 4, 5]], ["Weekends", [0, 6]]].map(([l, v]) =>
-      el("button", { type: "button", class: "linkbtn", onclick: () => save({ days: v }) }, l)));
+    onclick: () => { setPlan(id, ws, days.includes(n) ? days.filter(x => x !== n) : [...days, n]); redraw(); },
+  }, el("span", { text: label }), el("small", { text: parseDate(addDays(ws, i)).getDate() }))));
+  const fixed = el("label", { class: "small", style: "display:flex;gap:8px;align-items:center" },
+    el("input", { type: "checkbox", checked: h.fixed, onchange: e => save({ fixed: e.target.checked }) }),
+    "Same days every week, so there's nothing to plan");
 
   // Reminders
   const remRows = h.reminders.length
     ? el("div", { class: "rows" }, h.reminders.slice().sort((a, b) => a.time.localeCompare(b.time)).map(r => el("div", { class: "row" },
         el("div", { class: "main" }, timePick(r.time, { value: r.time, className: "datelink", ariaLabel: `Change the ${r.time} reminder` },
           v => save({ reminders: h.reminders.map(x => x.id === r.id ? { ...x, time: v } : x) }))),
-        el("span", { class: "meta", text: daysText(h) }),
+        el("span", { class: "meta", text: "on planned days" }),
         el("button", { class: "linkbtn", style: "color:var(--muted)", onclick: () => save({ reminders: h.reminders.filter(x => x.id !== r.id) }) }, "Remove"))))
     : null;
   const addReminder = timePick("Add a reminder time", { ariaLabel: "Add a reminder time" }, v => {
@@ -209,24 +407,17 @@ export function renderHabitPage(root, id, navigate) {
     type: "button", class: "chip", "aria-pressed": String((h.timerMin || null) === v), onclick: () => save({ timerMin: v }),
   }, l)));
 
-  const del = el("div", { class: "tools" });
-  const ask = () => del.replaceChildren(
-    el("span", { class: "small", text: `Remove “${h.name}” and its history?` }),
-    el("button", { class: "btn small danger", onclick: () => { reminders.cancelTimer(id); saveHabits(loadHabits().filter(x => x.id !== id)); navigate("home"); } }, "Remove"),
-    el("button", { class: "btn small", onclick: idle }, "Keep"));
-  const idle = () => del.replaceChildren(el("button", { class: "linkbtn", style: "color:var(--muted)", onclick: ask }, "Remove habit"));
-  idle();
-
-  const { planned, done } = weekSummary(h);
   root.append(
     el("section", { class: "card", style: "--fc:var(--m-habits)" },
       el("label", { class: "field" }, el("span", { text: "Habit" }), name),
-      el("div", { class: "field" }, el("span", { class: "field-label", text: "Which days?" }), dayChips, presets),
-      el("p", { class: "mono muted", text: `${done} of ${planned} this week · ${h.done.length} times in all` })),
+      el("div", { class: "field" },
+        el("span", { class: "field-label", text: `Days ${weekName(ws)}` }),
+        dayChips, fixed)),
+    historyCard(h),
     el("section", { class: "card" },
       el("h2", { style: "font-size:19px;font-weight:500", text: "Reminders" }),
       el("p", { class: "small muted", text: reminders.canNotify()
-        ? `Your phone will remind you at these times, ${daysText(h).toLowerCase() === "every day" ? "every day" : "on " + daysText(h)}.`
+        ? "Your phone will remind you at these times on the days you've planned."
         : "Reminders work in the Android app." }),
       remRows,
       el("div", { class: "tools" }, addReminder)),
@@ -235,4 +426,87 @@ export function renderHabitPage(root, id, navigate) {
       el("p", { class: "small muted", text: "With a timer, a ▶ button appears next to the habit. When the time is up you'll get a notification, and the habit is ticked off." }),
       timerChips),
     del);
+}
+
+// The last 8 weeks of a "do" habit: one line of days per week.
+function historyCard(h) {
+  const thisWs = weekStart(today());
+  const first = weekStart(isoDate(new Date(h.createdAt)));
+  const weeks = Array.from({ length: 8 }, (_, i) => addDays(thisWs, -7 * i)).filter(w => w >= first);
+  return el("section", { class: "card" },
+    el("div", { class: "rowhead" },
+      el("h2", { style: "font-size:19px;font-weight:500", text: "History" }),
+      el("span", { class: "mono muted", text: `${h.done.length} time${h.done.length === 1 ? "" : "s"} in all` })),
+    el("div", { class: "hb-history" }, weeks.map(w => {
+      const s = weekSummary(h, w);
+      return el("div", { class: "hb-week" },
+        el("span", { class: "mono muted", text: shortDate(w) }),
+        el("span", { class: "hb-cells", "aria-hidden": "true" }, s.dates.map(d =>
+          el("i", { class: h.done.includes(d) ? "hit" : isOn(h, d) ? "on" : "" }))),
+        el("span", { class: "mono", text: s.planned ? `${s.done}/${s.planned}` : `${s.done}` }));
+    })),
+    el("p", { class: "small muted", text: "Filled: done. Ringed: planned but not done." }));
+}
+
+// ---------- a habit to do less of ----------
+function renderBreakPage(root, h, name, redraw) {
+  const t = today(), ws = weekStart(t);
+  const since = addDays(t, -27);
+  const recent = h.log.filter(e => e.at.slice(0, 10) >= since);
+
+  // When it happens, over the last four weeks
+  const parts = PARTS.map(([label, from, to]) => [label, recent.filter(e => { let hr = +e.at.slice(11, 13); if (hr < 5) hr += 24; return hr >= from && hr < to; }).length]);
+  const byDay = WEEKDAYS.map(([n, label]) => [label, recent.filter(e => parseDate(e.at.slice(0, 10)).getDay() === n).length]);
+  const bars = (rows, color) => {
+    const max = Math.max(1, ...rows.map(r => r[1]));
+    return el("div", { class: "hb-bars" }, rows.map(([label, n]) => el("div", { class: "hb-bar" },
+      el("span", { class: "small", text: label }),
+      el("div", { class: "meter", style: `--mc:${color}` }, el("i", { style: `left:0;width:${(n / max) * 100}%` })),
+      el("span", { class: "mono", text: n }))));
+  };
+  const weeks = Array.from({ length: 8 }, (_, i) => addDays(ws, -7 * (7 - i))).filter(w => w >= weekStart(isoDate(new Date(h.createdAt))));
+  const weekRows = weeks.map(w => [shortDate(w), countIn(h, w, addDays(w, 6))]);
+
+  const logNow = el("button", { class: "btn primary", onclick: () => { logOnce(h.id); redraw(); } }, "Log one now");
+  const earlier = timePick("Earlier today…", { ariaLabel: "Log a time earlier today" }, v => { logOnce(h.id, `${t}T${v}`); redraw(); });
+
+  // Recent entries, newest first, grouped by day
+  const lastTwoWeeks = h.log.filter(e => e.at.slice(0, 10) >= addDays(t, -13)).slice().reverse();
+  const groups = [];
+  for (const e of lastTwoWeeks) {
+    const d = e.at.slice(0, 10);
+    if (!groups.length || groups[groups.length - 1][0] !== d) groups.push([d, []]);
+    groups[groups.length - 1][1].push(e);
+  }
+  const entryRow = e => {
+    const note = el("input", { type: "text", value: e.note || "", placeholder: "What was going on?", maxlength: 80, autocomplete: "off", "aria-label": `Note for ${timeOf(e.at)}` });
+    note.addEventListener("change", () => patchEntry(h.id, e.id, { note: note.value.trim() }));
+    return el("div", { class: "row", style: "gap:10px" },
+      timePick(timeOf(e.at), { value: timeOf(e.at), className: "datelink mono", ariaLabel: `Change the time ${timeOf(e.at)}` }, v => { patchEntry(h.id, e.id, { at: `${e.at.slice(0, 10)}T${v}` }); redraw(); }),
+      el("div", { class: "main" }, note),
+      el("button", { class: "linkbtn", style: "color:var(--muted)", "aria-label": `Remove the entry at ${timeOf(e.at)}`, onclick: () => { patchEntry(h.id, e.id, null); redraw(); } }, "✕"));
+  };
+  const dayLabel = d => d === t ? "Today" : d === addDays(t, -1) ? "Yesterday" : `${DAY_NAMES[parseDate(d).getDay()]} ${shortDate(d)}`;
+
+  const thisWeek = countIn(h, ws, t), lastWeek = countIn(h, addDays(ws, -7), addDays(ws, -1));
+  root.append(...[
+    el("section", { class: "card", style: "--fc:var(--q-drop)" },
+      el("label", { class: "field" }, el("span", { text: "Doing less of" }), name),
+      el("p", { class: "mono muted", text: `Today ${countIn(h, t, t)} · this week ${thisWeek} · last week ${lastWeek}` }),
+      el("div", { class: "tools" }, logNow, earlier),
+      el("p", { class: "small muted", text: "Log it each time, without judging it. A note on what was going on helps you spot what sets it off." })),
+    recent.length >= 3 ? el("section", { class: "card" },
+      el("div", { class: "rowhead" }, el("h2", { style: "font-size:19px;font-weight:500", text: "When it happens" }), el("span", { class: "mono muted", text: "last 4 weeks" })),
+      bars(parts, "var(--q-drop)"),
+      bars(byDay, "var(--q-drop)")) : null,
+    weekRows.length > 1 ? el("section", { class: "card" },
+      el("h2", { style: "font-size:19px;font-weight:500", text: "Week by week" }),
+      bars(weekRows, "var(--muted)")) : null,
+    el("section", { class: "section" },
+      el("h2", { text: "Recent" }),
+      groups.length
+        ? groups.map(([d, list]) => el("div", { class: "section", style: "gap:6px" },
+            el("span", { class: "mono muted", text: `${dayLabel(d)} · ${list.length}` }),
+            el("div", { class: "rows" }, list.map(entryRow))))
+        : el("p", { class: "small muted", text: "Nothing logged in the last two weeks." }))].filter(Boolean));
 }

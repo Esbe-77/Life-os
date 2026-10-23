@@ -2,7 +2,7 @@
 
 A calm personal app for your phone, built from five small parts:
 
-- **Home**: one page with today's habits, a quick energy check-in, this week's priorities, who to reach out to, and decisions waiting on you.
+- **Home**: today's habits (planned each Sunday, plus habits you're cutting back on, logged each time), a quick energy check-in, this week's priorities, who to reach out to, and decisions waiting on you.
 - **Weekly review**: the same five questions every Sunday (what went well, what drained you, what you avoided, what matters next week, one thing to drop), plus a look back over months.
 - **Decision journal**: write down what you decided, why, and what you expect. When the check-in date comes, it asks how it turned out.
 - **People**: the 15–20 people who matter most, and a gentle nudge when it's been a while.

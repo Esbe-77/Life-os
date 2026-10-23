@@ -5,6 +5,7 @@
 //                                         status: "draft" | "done", createdAt, updatedAt } } }
 
 import * as store from "../store.js";
+import { weekLines, needsPlan, planWeek } from "../habits.js";
 import { $, el, MONTHS, MONTHS_LONG, isoDate, parseDate, addDays, prefersReducedMotion } from "../ui.js";
 
 const ID = "weekly-review";
@@ -214,9 +215,23 @@ export default {
           el("h2", { style: "font-size:24px", text: r?.status === "done" ? "Review saved" : "Your answers" }),
           el("span", { class: "savestate", id: "wr-savestate", text: s.saveMsg })),
         answersBlock(s.draft),
+        habitsBlock(),
         el("div", { class: "actions" },
           el("button", { class: "btn", onclick: () => goStep(0) }, "Edit answers"),
           el("button", { class: "btn primary", onclick: () => navigate(ID + "/lookback") }, "Look back over past weeks")));
+    }
+
+    // How the week's habits went, and a way into planning the next week.
+    function habitsBlock() {
+      if (s.demo) return null;
+      const lines = weekLines(addDays(s.week, -6));
+      const canPlan = s.week === thisSunday() && planWeek() > s.week && needsPlan().length > 0;
+      if (!lines.length) return null;
+      return el("div", { class: "wr-ans", style: "--qc:var(--m-habits)" },
+        el("div", {},
+          el("div", { class: "k", text: "Habits this week" }),
+          lines.map(l => el("div", { class: "v small" }, `${l.name}: `, el("span", { class: "muted", text: l.text }))),
+          canPlan ? el("a", { class: "btn small", href: "#/home/plan", style: "margin-top:10px;display:inline-flex" }, "Plan next week's habits") : null));
     }
 
     function goStep(i) { saveNow(); s.step = Math.max(0, Math.min(5, i)); renderReview(); }

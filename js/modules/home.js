@@ -7,7 +7,7 @@
 import * as store from "../store.js";
 import * as backup from "../backup.js";
 import { el, addDays, parseDate, formatDate } from "../ui.js";
-import { loadHabits, saveHabits, habitsSection, renderHabitPage, tickTimers, getHabit } from "../habits.js";
+import { loadHabits, saveHabits, mergeHabits, habitsSection, renderHabitPage, renderPlanPage, planTitle, tickTimers, getHabit } from "../habits.js";
 import review from "./weekly-review.js";
 import decisions from "./decisions.js";
 import people from "./people.js";
@@ -31,7 +31,7 @@ export default {
   icon: "home",
   color: "var(--accent)",
 
-  title(view) { return view.startsWith("habit/") ? (getHabit(view.slice(6))?.name || "Habit") : greeting(); },
+  title(view) { return view === "plan" ? planTitle() : view.startsWith("habit/") ? (getHabit(view.slice(6))?.name || "Habit") : greeting(); },
   backTo(view) { return view ? "home" : null; },
   subtitle(view) { if (view) return ""; const d = new Date(); return `${DAYS[d.getDay()]} ${d.getDate()} ${LONG_MONTHS[d.getMonth()]}`; },
   hasData() { return loadHabits().length > 0; },
@@ -39,15 +39,7 @@ export default {
   exportData() { return { habits: loadHabits() }; },
   importData(data) {
     if (!Array.isArray(data?.habits)) return null;
-    const mine = loadHabits();
-    let added = 0, kept = 0;
-    for (const h of data.habits) {
-      if (!h?.id || !h.name) continue;
-      const m = mine.find(x => x.id === h.id);
-      if (!m) { mine.push({ ...h, createdAt: h.createdAt || new Date().toISOString(), done: (h.done || []).slice(), timerEndsAt: null }); added++; continue; }
-      const merged = [...new Set([...(m.done || []), ...(h.done || [])])].sort();
-      if (merged.length !== (m.done || []).length) { m.done = merged; added++; } else kept++;
-    }
+    const { mine, added, kept } = mergeHabits(data.habits);
     if (added && !saveHabits(mine)) return { error: "Your phone refused to save. Free up some storage and try again." };
     return { added, kept, noun: ["habit", "habits"] };
   },
@@ -58,6 +50,7 @@ export default {
     function render() {
       const y = window.scrollY;
       root.replaceChildren();
+      if (view === "plan") { renderPlanPage(root, navigate); return; }
       if (view.startsWith("habit/")) { renderHabitPage(root, view.slice(6), navigate); return; }
       const sections = [sundayNudge(), habitsSection(render), energySection(), prioritiesSection(), peopleSection(), decisionsSection(), backupNudge()];
       sections.forEach(s => s && root.append(s));

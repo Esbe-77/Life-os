@@ -133,20 +133,19 @@ function mountSettings(root) {
       : "Install the app to your home screen so your phone treats its data as permanent.";
   })();
 
-  const rr = store.getMeta().reviewReminder || { on: false, time: "18:00" };
-  const reminderCard = reminders.canNotify() ? el("section", { class: "card" },
-    el("h2", { style: "font-size:20px;font-weight:500", text: "Reminders" }),
+  const rr = { on: false, time: "19:00", ...store.getMeta().reviewReminder };
+  const setRR = patch => { store.setMeta({ reviewReminder: { ...rr, ...patch } }); root.replaceChildren(); mountSettings(root); };
+  const reminderCard = el("section", { class: "card" },
+    el("h2", { style: "font-size:20px;font-weight:500", text: "Sunday review" }),
     el("div", { class: "row", style: "padding:0;border:0" },
       el("div", { class: "main" },
-        el("span", { class: "title", text: "Weekly review on Sundays" }),
-        el("span", { class: "meta" }, rr.on ? "At " : "Off", rr.on ? timePick(rr.time, { value: rr.time, className: "datelink", ariaLabel: "Change the weekly review reminder time" }, t => {
-          store.setMeta({ reviewReminder: { on: true, time: t } }); root.replaceChildren(); mountSettings(root);
-        }) : null)),
-      el("button", { class: "btn small", "aria-pressed": String(rr.on), onclick: () => {
+        el("span", { class: "title" }, "Sundays at ", timePick(rr.time, { value: rr.time, className: "datelink", ariaLabel: "Change the Sunday review time" }, t => setRR({ time: t }))),
+        el("span", { class: "meta", text: reminders.canNotify() ? (rr.on ? "Your phone reminds you" : "No reminder") : "Reminders work in the Android app" })),
+      reminders.canNotify() ? el("button", { class: "btn small", "aria-pressed": String(rr.on), onclick: () => {
         if (!rr.on) reminders.askPermission();
-        store.setMeta({ reviewReminder: { ...rr, on: !rr.on } }); root.replaceChildren(); mountSettings(root);
-      } }, rr.on ? "Turn off" : "Turn on")),
-    el("p", { class: "small muted", text: "Decisions also remind you on their check-in day, at 9am. Habit reminders are set on each habit: tap its name on Home." })) : null;
+        setRR({ on: !rr.on });
+      } }, rr.on ? "Turn off" : "Remind me") : null),
+    el("p", { class: "small muted", text: "From this time on Sunday, Home asks you to plan next week's habits." + (reminders.canNotify() ? " Decisions remind you on their check-in day, at 9am. Habit reminders are set on each habit." : "") }));
 
   root.append(
     reminderCard,
