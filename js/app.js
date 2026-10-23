@@ -116,6 +116,10 @@ function mountSettings(root) {
   const since = backup.daysSinceBackup();
   const persisted = el("span", { text: "Checking…" });
   (async () => {
+    if (window.LifeOSAndroid) {
+      persisted.textContent = `Life OS app ${window.LifeOSAndroid.version()}. Your data stays through updates. Uninstalling the app deletes it, so save a backup first.`;
+      return;
+    }
     const ok = navigator.storage?.persisted ? await navigator.storage.persisted().catch(() => false) : false;
     persisted.textContent = ok
       ? "Your phone has agreed to keep this app's data even when storage runs low."
@@ -130,7 +134,7 @@ function mountSettings(root) {
       el("div", { class: "tools" },
         el("button", { class: "btn primary", onclick: async () => {
           const how = await backup.saveBackup();
-          note.textContent = how === "cancelled" ? "Cancelled." : "Backup saved. Keep it somewhere other than this phone.";
+          note.textContent = how === "cancelled" ? "Cancelled." : how === "failed" ? "Couldn't save the file. Try another place." : "Backup saved. Keep it somewhere other than this phone.";
           renderSettingsAgain();
         } }, "Save a backup"),
         el("button", { class: "btn", onclick: () => fileIn.click() }, "Restore from a backup"),
@@ -140,7 +144,7 @@ function mountSettings(root) {
     el("section", { class: "card" },
       el("h2", { style: "font-size:20px;font-weight:500", text: "On this phone" }),
       el("p", { class: "small" }, persisted),
-      el("p", { class: "small muted", text: "To install: open this page in Chrome, tap the ⋮ menu, then “Add to Home screen” or “Install app”. It then opens like any other app and works offline." })),
+      window.LifeOSAndroid ? null : el("p", { class: "small muted", text: "To install: open this page in Chrome, tap the ⋮ menu, then “Add to Home screen” or “Install app”. It then opens like any other app and works offline." })),
   );
   function renderSettingsAgain() {
     const m = root.querySelector(".mono.muted");
@@ -154,4 +158,5 @@ window.addEventListener("hashchange", route);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && current) renderChrome(); });
 store.requestPersistence();
 route();
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+// The Android app ships its files inside the APK, so it needs no offline cache.
+if ("serviceWorker" in navigator && !window.LifeOSAndroid) navigator.serviceWorker.register("sw.js").catch(() => {});

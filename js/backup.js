@@ -47,6 +47,13 @@ export function restore(json) {
 // Hands a file to the phone: the share sheet where available (so it can go
 // straight to Google Drive or email), otherwise a normal download.
 export async function saveFile(filename, text, type = "application/json") {
+  // Inside the Android app: the phone's "save to" picker (Drive, Downloads…).
+  if (window.LifeOSAndroid) {
+    return new Promise(resolve => {
+      window.__lifeosSaveResult = result => { window.__lifeosSaveResult = null; resolve(result); };
+      window.LifeOSAndroid.saveFile(filename, text, type);
+    });
+  }
   const file = new File([text], filename, { type });
   try {
     // Phones get the share sheet; computers get a plain download.
@@ -69,7 +76,7 @@ export async function saveBackup() {
   const today = new Date();
   const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const how = await saveFile(`life-os-backup-${stamp}.json`, JSON.stringify(buildBackup(), null, 2));
-  if (how !== "cancelled") store.setMeta({ lastBackupAt: new Date().toISOString() });
+  if (how !== "cancelled" && how !== "failed") store.setMeta({ lastBackupAt: new Date().toISOString() });
   return how;
 }
 

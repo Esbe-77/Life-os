@@ -22,8 +22,17 @@ js/backup.js          one backup file for everything; restore; share/download
 js/ui.js              el() DOM helper, date helpers ("YYYY-MM-DD" local dates)
 js/modules/index.js   module list, in tab-bar order
 js/modules/*.js       home (dashboard + habits), weekly-review, decisions, people, energy
-sw.js                 offline cache
+sw.js                 offline cache (web install only; the Android app skips it)
+android/              native shell: one WebView serving the web files from the APK (copied in at build time)
+.github/workflows/    builds the APK on every push and publishes it as a GitHub release
 ```
+
+## Android app
+
+- The page is served at `https://appassets.androidplatform.net/assets/www/`. Never change that address or the `applicationId`: the saved data is tied to both.
+- `window.LifeOSAndroid` exists only inside the app. It provides `saveFile(name, text, mime)`, which reports back through `window.__lifeosSaveResult`, and `version()`.
+- File pickers (`<input type=file>`) work through `onShowFileChooser` in `MainActivity`.
+- Releases must be signed with the same key (the repo secrets), or updates won't install over the old version.
 
 ## Module shape
 
