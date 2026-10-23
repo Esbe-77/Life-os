@@ -50,7 +50,13 @@ jobs:
           LIFEOS_VERSION_NAME: 1.${{ github.run_number }}
         run: gradle assembleRelease --no-daemon --stacktrace
 
-      - run: cp android/app/build/outputs/apk/release/app-release.apk life-os.apk
+      - name: Check the APK
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk life-os.apk
+          for f in index.html css/app.css js/app.js js/modules/index.js; do
+            unzip -l life-os.apk "assets/www/$f" > /dev/null || { echo "::error::assets/www/$f is missing from the APK"; exit 1; }
+          done
+          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs life-os.apk | head -3
 
       - uses: actions/upload-artifact@v4
         with:
