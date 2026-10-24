@@ -113,6 +113,13 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        // Lets the page pick up anything done from a notification while it was away.
+        if (web != null) web.evaluateJavascript("window.__lifeosResume && window.__lifeosResume()", null);
+    }
+
+    @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
         web.saveState(outState);
@@ -180,6 +187,12 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void startTimer(String id, int seconds, String title, String text) {
             Reminders.startTimer(getApplicationContext(), id, seconds, title, text);
+        }
+
+        /** Done taps from habit notifications since the page last asked, as JSON. */
+        @JavascriptInterface
+        public String takeDone() {
+            return Reminders.takeDone(getApplicationContext());
         }
 
         @JavascriptInterface
