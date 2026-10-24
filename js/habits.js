@@ -197,6 +197,7 @@ const timeOf = at => at.slice(11, 16);
 
 // ---------- the section on Home ----------
 let justLogged = null; // { habitId, entryId, until } so a mistaken tap can be undone
+let reordering = false; // Home shows drag handles instead of ticks while true
 
 export function habitsSection(rerender) {
   settleTimers();
@@ -208,8 +209,12 @@ export function habitsSection(rerender) {
   const draw = () => {
     sec.replaceChildren();
     sec.append(el("div", { class: "rowhead" },
-      el("h2", { text: "Today's habits" }),
-      habits.length ? el("button", { class: "linkbtn", onclick: () => { adding = !adding; draw(); if (adding) sec.querySelector("#habit-new")?.focus(); } }, adding ? "Done" : "Add") : null));
+      el("h2", { text: reordering ? "Drag to reorder" : "Habits" }),
+      reordering
+        ? el("button", { class: "linkbtn", onclick: () => { reordering = false; rerender(); } }, "Done")
+        : habits.length ? el("span", { class: "tools", style: "gap:16px" },
+            habits.length > 1 && !adding ? el("button", { class: "linkbtn", onclick: () => { reordering = true; rerender(); } }, "Reorder") : null,
+            el("button", { class: "linkbtn", onclick: () => { adding = !adding; draw(); if (adding) sec.querySelector("#habit-new")?.focus(); } }, adding ? "Done" : "Add")) : null));
 
     if (!habits.length) {
       sec.append(el("div", { class: "card", style: "gap:10px" },
@@ -219,19 +224,56 @@ export function habitsSection(rerender) {
       return;
     }
 
+    const dos = habits.filter(h => h.kind === "do"), breaks = habits.filter(h => h.kind === "break");
+    if (reordering) {
+      // Each row gets a handle, which drags at once; holding the row works too.
+      const dragRow = h => el("div", { class: "row", style: "padding:6px 6px 6px 16px" },
+        el("div", { class: "main" }, el("span", { class: "title", text: h.name })),
+        el("span", { class: "drag-handle", "data-drag": "", "aria-hidden": "true", text: "⠿" }));
+      if (dos.length) sec.append(sortable(el("div", { class: "rows sortable" }, dos.map(dragRow)), (from, to) => reorder(dos, from, to)));
+      if (breaks.length) {
+        sec.append(el("span", { class: "mono muted", style: "margin-top:4px", text: "DOING LESS OF" }));
+        sec.append(sortable(el("div", { class: "rows sortable" }, breaks.map(dragRow)), (from, to) => reorder(breaks, from, to)));
+      }
+      return;
+    }
+
     const plan = planCard();
     if (plan) sec.append(plan);
-
-    const dos = habits.filter(h => h.kind === "do"), breaks = habits.filter(h => h.kind === "break");
-    if (dos.length) {
-      sec.append(sortable(el("div", { class: "rows sortable" }, dos.map(h => habitRow(h, isOn(h, t)))), (from, to) => reorder(dos, from, to)));
-    }
+    if (dos.length) sec.append(holdToReorder(el("div", { class: "rows" }, dos.map(h => habitRow(h, isOn(h, t))))));
     if (breaks.length) {
       sec.append(el("span", { class: "mono muted", style: "margin-top:4px", text: "DOING LESS OF" }));
-      sec.append(sortable(el("div", { class: "rows sortable" }, breaks.map(breakRow)), (from, to) => reorder(breaks, from, to)));
+      sec.append(holdToReorder(el("div", { class: "rows" }, breaks.map(breakRow))));
     }
     if (adding) sec.append(addRow());
   };
+
+  // Holding a habit (not its buttons) switches Home into reorder mode.
+  function holdToReorder(list) {
+    let timer = null, start = null, held = false, moved = 0;
+    const stop = () => { clearTimeout(timer); timer = null; };
+    list.addEventListener("pointerdown", e => {
+      if (e.target.closest("button")) return;
+      start = { x: e.clientX, y: e.clientY }; held = false; moved = 0;
+      timer = setTimeout(enter, 420);
+    });
+    // The phone's own long-press (contextmenu) counts as a hold too.
+    const enter = () => {
+      if (held) return;
+      stop(); held = true; navigator.vibrate?.(15); reordering = true; rerender();
+      // The lifting finger's tap would land on whatever is now under it.
+      const swallow = e => { e.preventDefault(); e.stopPropagation(); };
+      document.addEventListener("click", swallow, { capture: true, once: true });
+      setTimeout(() => document.removeEventListener("click", swallow, { capture: true }), 1000);
+    };
+    list.addEventListener("pointermove", e => { if (!start) return; moved = Math.hypot(e.clientX - start.x, e.clientY - start.y); if (timer && moved > 8) stop(); });
+    ["pointerup", "pointerleave"].forEach(t => list.addEventListener(t, stop));
+    // A scroll cancels the hold; a cancel without movement may be the phone's long-press, so contextmenu decides.
+    list.addEventListener("pointercancel", () => { if (moved > 3) stop(); });
+    list.addEventListener("contextmenu", e => { e.preventDefault(); if (timer) enter(); });
+    list.classList.add("holdable");
+    return list;
+  }
 
   // Moves a habit within its list (to do, or to do less of), keeping the other list where it is.
   function reorder(group, from, to) {
@@ -466,7 +508,7 @@ export function renderHabitPage(root, id, navigate) {
       h.target > 1 ? el("div", { class: "rowhead", style: "align-items:center" },
         el("span", { class: "field-label", text: `Today: ${n} of ${h.target}` }),
         stepper(n, "Today", v => { bump(id, today(), v - n); redraw(); }, 0, h.target)) : null),
-    historyCard(h),
+    historyCard(h, redraw),
     el("section", { class: "card" },
       el("h2", { style: "font-size:19px;font-weight:500", text: "Reminders" }),
       el("p", { class: "small muted", text: reminders.canNotify()
@@ -484,7 +526,7 @@ export function renderHabitPage(root, id, navigate) {
 }
 
 // The last 8 weeks of a "do" habit: one line of days per week.
-function historyCard(h) {
+function historyCard(h, redraw) {
   const thisWs = weekStart(today());
   const first = weekStart(isoDate(new Date(h.createdAt)));
   const weeks = Array.from({ length: 8 }, (_, i) => addDays(thisWs, -7 * i)).filter(w => w >= first);
@@ -496,11 +538,16 @@ function historyCard(h) {
       const s = weekSummary(h, w);
       return el("div", { class: "hb-week" },
         el("span", { class: "mono muted", text: shortDate(w) }),
-        el("span", { class: "hb-cells", "aria-hidden": "true" }, s.dates.map(d =>
-          el("i", { class: h.done.includes(d) ? "hit" : isOn(h, d) ? "on" : "" }))),
+        el("span", { class: "hb-cells" }, s.dates.map(d => {
+          const hit = h.done.includes(d), cls = hit ? "hit" : isOn(h, d) ? "on" : "";
+          if (d > today()) return el("i", { class: cls });
+          const label = `${DAY_NAMES[parseDate(d).getDay()]} ${shortDate(d)}`;
+          return el("button", { type: "button", class: cls, "aria-pressed": String(hit), "aria-label": `${label}: ${hit ? "done, tap to undo" : "tap to mark done"}`,
+            onclick: () => { bump(h.id, d, hit ? -h.target : h.target); redraw(); } });
+        })),
         el("span", { class: "mono", text: s.planned ? `${s.done}/${s.planned}` : `${s.done}` }));
     })),
-    el("p", { class: "small muted", text: "Filled: done. Ringed: planned but not done." }));
+    el("p", { class: "small muted", text: "Filled: done. Ringed: planned but not done. Tap a day to tick it off, or tap again to undo." }));
 }
 
 // ---------- a habit to do less of ----------
