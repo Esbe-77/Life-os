@@ -4,7 +4,7 @@
 
 import * as store from "./store.js";
 import { isoDate, addDays } from "./ui.js";
-import { loadHabits, planWeek, plannedDates } from "./habits.js";
+import { loadHabits, planWeek, plannedDates, countOn } from "./habits.js";
 
 const bridge = () => window.LifeOSAndroid;
 export const canNotify = () => typeof bridge()?.setReminders === "function";
@@ -23,7 +23,9 @@ export function syncReminders() {
     for (const date of plannedDates(h, today, h.fixed ? addDays(today, 27) : planEnd)) {
       if (h.done.includes(date)) continue; // already done that day
       for (const r of h.reminders) {
-        list.push({ id: `habit-${h.id}-${r.id}-${date}`, title: h.name, text: "A reminder for your habit.", ...at(r.time), date, route: "#/home" });
+        list.push({ id: `habit-${h.id}-${r.id}-${date}`, title: h.name, ...at(r.time), date, route: "#/home",
+          text: h.target > 1 ? `One of your ${h.target} for today. Tap Done one when you have.` : "Tap Done when you have.",
+          habit: h.id, target: h.target, count: countOn(h, date) });
       }
     }
   }

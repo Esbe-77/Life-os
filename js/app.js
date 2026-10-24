@@ -6,6 +6,7 @@
 import * as store from "./store.js";
 import * as backup from "./backup.js";
 import * as reminders from "./reminders.js";
+import { applyNotificationDone } from "./habits.js";
 import { $, el, timePick } from "./ui.js";
 import { MODULES, TABS } from "./modules/index.js";
 
@@ -176,6 +177,13 @@ function mountSettings(root) {
 }
 
 // ---------- start ----------
+// Habits ticked off from a notification are applied before anything is drawn,
+// and again whenever the app comes back to the front.
+applyNotificationDone();
+window.__lifeosResume = () => {
+  if (!applyNotificationDone() || !current) return;
+  current.instance?.unmount?.(); current = null; route();
+};
 window.addEventListener("hashchange", route);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && current) renderChrome(); });
 store.requestPersistence();

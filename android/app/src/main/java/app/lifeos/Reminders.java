@@ -24,11 +24,16 @@ import java.util.Set;
  * { id, title, text, hour, minute, route } plus either days: [0–6, 0 = Sunday]
  * for a repeating reminder or date: "YYYY-MM-DD" for a one-off. Only the next
  * time of each is booked with Android; when it fires the next one is booked.
+ *
+ * A habit reminder also carries { habit, date, target, count }. Its notification
+ * gets a Done button; taps are queued here until the page collects them
+ * (takeDone), and a reminder is skipped once the queued taps finish the day.
  */
 final class Reminders {
     private static final String PREFS = "lifeos_reminders";
     private static final String KEY_LIST = "list";
     private static final String KEY_BOOKED = "booked";
+    private static final String KEY_DONE = "done_queue";
     private static final String CHANNEL = "reminders";
 
     private Reminders() {}
@@ -122,6 +127,8 @@ final class Reminders {
     }
 
     static void show(Context c, JSONObject o) {
+        String habit = o.optString("habit", "");
+        if (!habit.isEmpty() && o.optInt("count") + queued(c, habit, o.optString("date")) >= o.optInt("target", 1)) return;
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(CHANNEL) == null) {
             nm.createNotificationChannel(new NotificationChannel(CHANNEL, "Reminders", NotificationManager.IMPORTANCE_DEFAULT));
@@ -138,11 +145,52 @@ final class Reminders {
                 .setContentText(o.optString("text", ""))
                 .setContentIntent(tap)
                 .setAutoCancel(true);
+        if (!habit.isEmpty()) {
+            int notifId = o.optString("id").hashCode();
+            Intent done = new Intent(c, DoneReceiver.class)
+                    .setAction("app.lifeos.DONE." + o.optString("id"))
+                    .putExtra("habit", habit)
+                    .putExtra("date", o.optString("date"))
+                    .putExtra("notif", notifId);
+            PendingIntent donePi = PendingIntent.getBroadcast(c, notifId, done,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            b.addAction(new Notification.Action.Builder(null, o.optInt("target", 1) > 1 ? "Done one" : "Done", donePi).build());
+        }
         try {
             nm.notify(o.optString("id").hashCode(), b.build());
         } catch (SecurityException ignored) {
             // Notifications not allowed; nothing to show.
         }
+    }
+
+    /** Records a Done tap from a notification, for the page to pick up. */
+    static synchronized void queueDone(Context c, String habit, String date) {
+        try {
+            JSONArray q = new JSONArray(prefs(c).getString(KEY_DONE, "[]"));
+            q.put(new JSONObject().put("habit", habit).put("date", date).put("at", System.currentTimeMillis()));
+            prefs(c).edit().putString(KEY_DONE, q.toString()).apply();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Hands the queued Done taps to the page and empties the queue. */
+    static synchronized String takeDone(Context c) {
+        String q = prefs(c).getString(KEY_DONE, "[]");
+        prefs(c).edit().remove(KEY_DONE).apply();
+        return q;
+    }
+
+    private static synchronized int queued(Context c, String habit, String date) {
+        int n = 0;
+        try {
+            JSONArray q = new JSONArray(prefs(c).getString(KEY_DONE, "[]"));
+            for (int i = 0; i < q.length(); i++) {
+                JSONObject e = q.getJSONObject(i);
+                if (habit.equals(e.optString("habit")) && date.equals(e.optString("date"))) n++;
+            }
+        } catch (Exception ignored) {
+        }
+        return n;
     }
 
     private static SharedPreferences prefs(Context c) {

@@ -130,6 +130,16 @@ function daysText(days) {
 const weekName = ws => ws === weekStart(today()) ? "this week" : ws > today() ? "next week" : `week of ${shortDate(ws)}`;
 
 // ---------- ticks, timers and logs ----------
+// Done taps from habit notifications (Android app), queued by the app until
+// the page is open. Returns how many were applied.
+export function applyNotificationDone() {
+  let list = [];
+  try { list = JSON.parse(window.LifeOSAndroid?.takeDone?.() || "[]"); } catch {}
+  let n = 0;
+  for (const e of list) if (e?.habit && /^\d{4}-\d{2}-\d{2}$/.test(e.date || "") && bump(e.habit, e.date, 1) != null) n++;
+  return n;
+}
+
 // How many times it's been done on a day, and a change of that by one.
 // Reaching the target completes the day.
 export const countOn = (h, iso) => h.counts[iso] ?? (h.done.includes(iso) ? h.target : 0);
