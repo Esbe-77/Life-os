@@ -21,7 +21,7 @@
 
 import * as store from "./store.js";
 import * as reminders from "./reminders.js";
-import { el, isoDate, addDays, parseDate, timePick, WEEKDAYS, weekStart, MONTHS, sortable, moveItem } from "./ui.js";
+import { el, isoDate, addDays, parseDate, timePick, WEEKDAYS, weekStart, MONTHS, sortable, moveItem, ding } from "./ui.js";
 
 const KEY = "habits";
 const ALL = [0, 1, 2, 3, 4, 5, 6];
@@ -151,6 +151,15 @@ function bump(id, iso, by) {
   const done = new Set(h.done);
   n >= h.target ? done.add(iso) : done.delete(iso);
   patchHabit(id, { counts, done: [...done].sort() });
+  return n;
+}
+
+// A tap in the app. Finishing the last go of a several-times-a-day habit
+// today plays a chime, so you know it's done for the day.
+function tap(id, iso, by) {
+  const h = getHabit(id); if (!h) return null;
+  const before = countOn(h, iso), n = bump(id, iso, by);
+  if (h.target > 1 && iso === today() && before < h.target && n >= h.target) ding();
   return n;
 }
 
@@ -352,7 +361,7 @@ export function habitsSection(rerender) {
         "aria-label": multi
           ? `${h.name}: ${n} of ${h.target} today. ${doneToday ? "Tap to take one off" : "Tap to add one"}`
           : `${h.name}: ${doneToday ? "done today, tap to undo" : "tap when done"}`,
-        onclick: () => { bump(h.id, t, doneToday ? -1 : 1); rerender(); },
+        onclick: () => { tap(h.id, t, doneToday ? -1 : 1); rerender(); },
       }, doneToday ? "✓" : multi ? String(n) : ""),
       el("a", { class: "main", href: `#/home/habit/${h.id}` },
         el("span", { class: "title", style: doneToday ? "color:var(--muted)" : "", text: h.name }),
@@ -517,7 +526,7 @@ export function renderHabitPage(root, id, navigate) {
         stepper(h.target, "Times a day", setTarget, 1, 20)),
       h.target > 1 ? el("div", { class: "rowhead", style: "align-items:center" },
         el("span", { class: "field-label", text: `Today: ${n} of ${h.target}` }),
-        stepper(n, "Today", v => { bump(id, today(), v - n); redraw(); }, 0, h.target)) : null),
+        stepper(n, "Today", v => { tap(id, today(), v - n); redraw(); }, 0, h.target)) : null),
     historyCard(h, redraw),
     el("section", { class: "card" },
       el("h2", { style: "font-size:19px;font-weight:500", text: "Reminders" }),
@@ -553,7 +562,7 @@ function historyCard(h, redraw) {
           if (d > today()) return el("i", { class: cls });
           const label = `${DAY_NAMES[parseDate(d).getDay()]} ${shortDate(d)}`;
           return el("button", { type: "button", class: cls, "aria-pressed": String(hit), "aria-label": `${label}: ${hit ? "done, tap to undo" : "tap to mark done"}`,
-            onclick: () => { bump(h.id, d, hit ? -h.target : h.target); redraw(); } });
+            onclick: () => { tap(h.id, d, hit ? -h.target : h.target); redraw(); } });
         })),
         el("span", { class: "mono", text: s.planned ? `${s.done}/${s.planned}` : `${s.done}` }));
     })),
