@@ -106,3 +106,24 @@ export function sortable(list, onMove, { delay = 380 } = {}) {
 
 // Moves one entry of an array, returning a new array.
 export function moveItem(arr, from, to) { const a = arr.slice(); const [x] = a.splice(from, 1); a.splice(to, 0, x); return a; }
+
+// A soft two-note chime made on the device (no sound file, no network), with a
+// short buzz. Used when the last go of a several-times-a-day habit is ticked.
+let audio = null;
+export function ding() {
+  navigator.vibrate?.([30, 60, 30]);
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    audio.resume?.();
+    const t0 = audio.currentTime;
+    [[784, 0], [1175, 0.13]].forEach(([freq, at]) => {
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.type = "sine"; o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, t0 + at);
+      g.gain.exponentialRampToValueAtTime(0.25, t0 + at + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.9);
+      o.connect(g).connect(audio.destination);
+      o.start(t0 + at); o.stop(t0 + at + 1);
+    });
+  } catch {}
+}

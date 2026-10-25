@@ -33,7 +33,7 @@ android/              native shell: one WebView serving the web files from the A
 
 - The page is served at `https://appassets.androidplatform.net/assets/www/`. Never change that address or the `applicationId`: the saved data is tied to both.
 - `window.LifeOSAndroid` exists only inside the app. It provides `saveFile(name, text, mime)`, which reports back through `window.__lifeosSaveResult`, plus `version()`, `setReminders(json)`, `startTimer(id, seconds, title, text)`, `cancelTimer(id)`, `requestNotifications()` and `takeDone()`.
-- Habit reminders have a Done button (`DoneReceiver`). Taps are queued natively and collected by the page with `takeDone()` at start and on resume (`window.__lifeosResume`).
+- Habit reminders have a Done button (`DoneReceiver`). The tap that finishes a several-times-a-day habit posts a short "all done" notification (its sound is the chime); in the app, `ding()` in ui.js plays one. Taps are queued natively and collected by the page with `takeDone()` at start and on resume (`window.__lifeosResume`).
 - Reminders: the page always sends the whole list (`js/reminders.js`) after any save. `Reminders.java` books only the next time of each with AlarmManager and books the following one when it fires. `BootReceiver` books them again after a restart or an update.
 - File pickers (`<input type=file>`) work through `onShowFileChooser` in `MainActivity`.
 - Releases must be signed with the same key (the repo secrets), or updates won't install over the old version.

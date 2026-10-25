@@ -28,6 +28,8 @@ import java.util.Set;
  * A habit reminder also carries { habit, date, target, count }. Its notification
  * gets a Done button; taps are queued here until the page collects them
  * (takeDone), and a reminder is skipped once the queued taps finish the day.
+ * The tap that finishes a several-times-a-day habit posts a short "all done"
+ * notification, which makes the phone's notification sound.
  */
 final class Reminders {
     private static final String PREFS = "lifeos_reminders";
@@ -35,6 +37,7 @@ final class Reminders {
     private static final String KEY_BOOKED = "booked";
     private static final String KEY_DONE = "done_queue";
     private static final String CHANNEL = "reminders";
+    private static final String CHANNEL_DONE = "done";
 
     private Reminders() {}
 
@@ -178,6 +181,45 @@ final class Reminders {
         String q = prefs(c).getString(KEY_DONE, "[]");
         prefs(c).edit().remove(KEY_DONE).apply();
         return q;
+    }
+
+    /** After a Done tap: if it was the last go of the day, chime with a short note. */
+    static void chimeIfFinished(Context c, String habit, String date) {
+        int target = 1, count = 0;
+        String name = "";
+        boolean found = false;
+        try {
+            // The latest list the page sent holds the day's count so far.
+            JSONArray list = new JSONArray(prefs(c).getString(KEY_LIST, "[]"));
+            for (int i = 0; i < list.length(); i++) {
+                JSONObject o = list.getJSONObject(i);
+                if (habit.equals(o.optString("habit")) && date.equals(o.optString("date"))) {
+                    target = o.optInt("target", 1);
+                    count = o.optInt("count");
+                    name = o.optString("name", o.optString("title", ""));
+                    found = true;
+                    break;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        if (!found || target < 2 || count + queued(c, habit, date) != target) return;
+        NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(CHANNEL_DONE) == null) {
+            nm.createNotificationChannel(new NotificationChannel(CHANNEL_DONE, "Habit finished for the day", NotificationManager.IMPORTANCE_DEFAULT));
+        }
+        Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(c, CHANNEL_DONE) : new Notification.Builder(c);
+        b.setSmallIcon(R.drawable.ic_stat)
+                .setColor(0xFF2C5A4C)
+                .setContentTitle(name.isEmpty() ? "All done for today" : name + ": all done for today")
+                .setContentText("That's " + target + " of " + target + ". Nice.")
+                .setAutoCancel(true);
+        if (Build.VERSION.SDK_INT >= 26) b.setTimeoutAfter(15000);
+        if (Build.VERSION.SDK_INT < 26) b.setDefaults(Notification.DEFAULT_SOUND | Notification.DEFAULT_VIBRATE);
+        try {
+            nm.notify(("done-" + habit + date).hashCode(), b.build());
+        } catch (SecurityException ignored) {
+        }
     }
 
     private static synchronized int queued(Context c, String habit, String date) {
