@@ -159,11 +159,35 @@ final class Reminders {
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             b.addAction(new Notification.Action.Builder(null, o.optInt("target", 1) > 1 ? "Done one" : "Done", donePi).build());
         }
+        if ("review".equals(o.optString("complete"))) {
+            // The Sunday review: Complete marks the week's review done. The date is
+            // taken now, when the reminder shows, so a late tap still counts for Sunday.
+            int notifId = o.optString("id").hashCode();
+            Intent done = new Intent(c, DoneReceiver.class)
+                    .setAction("app.lifeos.REVIEW." + o.optString("id"))
+                    .putExtra("review", true)
+                    .putExtra("date", new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(new java.util.Date()))
+                    .putExtra("notif", notifId);
+            PendingIntent donePi = PendingIntent.getBroadcast(c, notifId, done,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            b.addAction(new Notification.Action.Builder(null, "Complete", donePi).build());
+        }
         try {
             nm.notify(o.optString("id").hashCode(), b.build());
         } catch (SecurityException ignored) {
             // Notifications not allowed; nothing to show.
         }
+    }
+
+    /** Records Complete on the Sunday review reminder, for the page to pick up. */
+    static synchronized void queueReview(Context c, String date) {
+        try {
+            JSONArray q = new JSONArray(prefs(c).getString(KEY_DONE, "[]"));
+            q.put(new JSONObject().put("review", true).put("date", date).put("at", System.currentTimeMillis()));
+            prefs(c).edit().putString(KEY_DONE, q.toString()).apply();
+        } catch (Exception ignored) {
+        }
+        chime(c, "Weekly review: complete", "Enjoy your week.");
     }
 
     /** Records a Done tap from a notification, for the page to pick up. */
@@ -204,21 +228,27 @@ final class Reminders {
         } catch (Exception ignored) {
         }
         if (!found || count + queued(c, habit, date) != target) return;
+        chime(c, name.isEmpty() ? "Complete" : name + ": complete",
+                target > 1 ? "That's " + target + " of " + target + " today. Nice." : "Done for today. Nice.");
+    }
+
+    /** A short note that clears itself; posting it makes the phone's notification sound. */
+    private static void chime(Context c, String title, String text) {
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= 26) {
             // Creating it again only updates the name shown in the phone's settings.
-            nm.createNotificationChannel(new NotificationChannel(CHANNEL_DONE, "Habit complete", NotificationManager.IMPORTANCE_DEFAULT));
+            nm.createNotificationChannel(new NotificationChannel(CHANNEL_DONE, "Completed", NotificationManager.IMPORTANCE_DEFAULT));
         }
         Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(c, CHANNEL_DONE) : new Notification.Builder(c);
         b.setSmallIcon(R.drawable.ic_stat)
                 .setColor(0xFF2C5A4C)
-                .setContentTitle(name.isEmpty() ? "Complete" : name + ": complete")
-                .setContentText(target > 1 ? "That's " + target + " of " + target + " today. Nice." : "Done for today. Nice.")
+                .setContentTitle(title)
+                .setContentText(text)
                 .setAutoCancel(true);
         if (Build.VERSION.SDK_INT >= 26) b.setTimeoutAfter(15000);
         if (Build.VERSION.SDK_INT < 26) b.setDefaults(Notification.DEFAULT_SOUND | Notification.DEFAULT_VIBRATE);
         try {
-            nm.notify(("done-" + habit + date).hashCode(), b.build());
+            nm.notify(("done-" + title).hashCode(), b.build());
         } catch (SecurityException ignored) {
         }
     }

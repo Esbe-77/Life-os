@@ -136,8 +136,25 @@ export function applyNotificationDone() {
   let list = [];
   try { list = JSON.parse(window.LifeOSAndroid?.takeDone?.() || "[]"); } catch {}
   let n = 0;
-  for (const e of list) if (e?.habit && /^\d{4}-\d{2}-\d{2}$/.test(e.date || "") && bump(e.habit, e.date, 1) != null) n++;
+  for (const e of list) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(e?.date || "")) continue;
+    if (e.review) { if (completeReview(e.date)) n++; }
+    else if (e.habit && bump(e.habit, e.date, 1) != null) n++;
+  }
   return n;
+}
+
+// Complete on the Sunday review reminder: marks that week's review done,
+// keeping anything already written in it.
+function completeReview(iso) {
+  const d = parseDate(iso), sun = addDays(iso, -d.getDay());
+  const data = store.load("weekly-review", { reviews: {} });
+  const reviews = data.reviews || {}, r = reviews[sun];
+  if (r?.status === "done") return false;
+  const now = new Date().toISOString();
+  reviews[sun] = { week: sun, answers: r?.answers || { well: "", drained: "", avoided: "", matters: "", drop: "" },
+    status: "done", createdAt: r?.createdAt || now, updatedAt: now };
+  return store.save("weekly-review", { ...data, reviews });
 }
 
 // How many times it's been done on a day, and a change of that by one.

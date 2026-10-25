@@ -31,7 +31,7 @@ export function syncReminders() {
   }
 
   const rr = store.getMeta().reviewReminder;
-  if (rr?.on) list.push({ id: "weekly-review", title: "Your weekly review", text: "Five questions, then plan next week's habits.", ...at(rr.time || "19:00"), days: [0], route: "#/weekly-review" });
+  if (rr?.on) list.push({ id: "weekly-review", title: "Your weekly review", text: "Five questions, then plan next week's habits.", ...at(rr.time || "19:00"), days: [0], route: "#/weekly-review", complete: "review" });
 
   const decisions = store.load("decisions", { decisions: {} }).decisions || {};
   for (const d of Object.values(decisions)) {
