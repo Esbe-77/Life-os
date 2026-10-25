@@ -154,12 +154,12 @@ function bump(id, iso, by) {
   return n;
 }
 
-// A tap in the app. Finishing the last go of a several-times-a-day habit
-// today plays a chime, so you know it's done for the day.
+// A tap in the app. Completing a habit for today (the last go, if it's
+// several times a day) plays a chime.
 function tap(id, iso, by) {
   const h = getHabit(id); if (!h) return null;
   const before = countOn(h, iso), n = bump(id, iso, by);
-  if (h.target > 1 && iso === today() && before < h.target && n >= h.target) ding();
+  if (iso === today() && before < h.target && n >= h.target) ding();
   return n;
 }
 
@@ -259,7 +259,17 @@ export function habitsSection(rerender) {
 
     const plan = planCard();
     if (plan) sec.append(plan);
-    if (dos.length) sec.append(holdToReorder(el("div", { class: "rows" }, dos.map(h => habitRow(h, isOn(h, t))))));
+    // Habits still to do today come first; ones finished for today, or for the
+    // whole week, sink to the bottom. Otherwise your own order is kept.
+    const ws = weekStart(t), we = addDays(ws, 6);
+    const rank = h => {
+      if (h.done.includes(t)) return 2;
+      const week = plannedDates(h, ws, we);
+      if (week.length && week.every(d => h.done.includes(d))) return 2;
+      return isOn(h, t) ? 0 : 1;
+    };
+    const sorted = dos.map((h, i) => [rank(h), i, h]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(x => x[2]);
+    if (dos.length) sec.append(holdToReorder(el("div", { class: "rows" }, sorted.map(h => habitRow(h, isOn(h, t))))));
     if (breaks.length) {
       sec.append(el("span", { class: "mono muted", style: "margin-top:4px", text: "DOING LESS OF" }));
       sec.append(holdToReorder(el("div", { class: "rows" }, breaks.map(breakRow))));

@@ -108,7 +108,7 @@ export function sortable(list, onMove, { delay = 380 } = {}) {
 export function moveItem(arr, from, to) { const a = arr.slice(); const [x] = a.splice(from, 1); a.splice(to, 0, x); return a; }
 
 // A soft two-note chime made on the device (no sound file, no network), with a
-// short buzz. Used when the last go of a several-times-a-day habit is ticked.
+// short buzz. Used when a habit is completed for the day.
 let audio = null;
 export function ding() {
   navigator.vibrate?.([30, 60, 30]);
