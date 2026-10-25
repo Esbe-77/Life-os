@@ -28,7 +28,7 @@ import java.util.Set;
  * A habit reminder also carries { habit, date, target, count }. Its notification
  * gets a Done button; taps are queued here until the page collects them
  * (takeDone), and a reminder is skipped once the queued taps finish the day.
- * The tap that finishes a several-times-a-day habit posts a short "all done"
+ * The tap that completes a habit for the day posts a short "complete"
  * notification, which makes the phone's notification sound.
  */
 final class Reminders {
@@ -183,7 +183,7 @@ final class Reminders {
         return q;
     }
 
-    /** After a Done tap: if it was the last go of the day, chime with a short note. */
+    /** After a Done tap: if it completed the habit for the day, chime with a short note. */
     static void chimeIfFinished(Context c, String habit, String date) {
         int target = 1, count = 0;
         String name = "";
@@ -203,16 +203,17 @@ final class Reminders {
             }
         } catch (Exception ignored) {
         }
-        if (!found || target < 2 || count + queued(c, habit, date) != target) return;
+        if (!found || count + queued(c, habit, date) != target) return;
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(CHANNEL_DONE) == null) {
-            nm.createNotificationChannel(new NotificationChannel(CHANNEL_DONE, "Habit finished for the day", NotificationManager.IMPORTANCE_DEFAULT));
+        if (Build.VERSION.SDK_INT >= 26) {
+            // Creating it again only updates the name shown in the phone's settings.
+            nm.createNotificationChannel(new NotificationChannel(CHANNEL_DONE, "Habit complete", NotificationManager.IMPORTANCE_DEFAULT));
         }
         Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(c, CHANNEL_DONE) : new Notification.Builder(c);
         b.setSmallIcon(R.drawable.ic_stat)
                 .setColor(0xFF2C5A4C)
-                .setContentTitle(name.isEmpty() ? "All done for today" : name + ": all done for today")
-                .setContentText("That's " + target + " of " + target + ". Nice.")
+                .setContentTitle(name.isEmpty() ? "Complete" : name + ": complete")
+                .setContentText(target > 1 ? "That's " + target + " of " + target + " today. Nice." : "Done for today. Nice.")
                 .setAutoCancel(true);
         if (Build.VERSION.SDK_INT >= 26) b.setTimeoutAfter(15000);
         if (Build.VERSION.SDK_INT < 26) b.setDefaults(Notification.DEFAULT_SOUND | Notification.DEFAULT_VIBRATE);
