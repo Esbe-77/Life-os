@@ -13,7 +13,7 @@
 //                 target: times a day (1 for most), counts: { "YYYY-MM-DD": n } (when target > 1),
 //                 plans: { "<Monday YYYY-MM-DD>": [0–6] (Date.getDay(), 0 = Sunday) },
 //                 fixed: bool (use the latest plan when a week has none),
-//                 reminders: [ { id, time: "HH:MM" } ],
+//                 reminders: [ { id, time: "HH:MM" } ], completedAt (last time a day was completed),
 //                 timerMin: number | null, timerEndsAt: ISO datetime | null,
 //                 log: [ { id, at: "YYYY-MM-DDTHH:MM", note } ] } ] }
 // Older data had one `days` list instead of `plans`: it becomes this week's
@@ -166,8 +166,9 @@ function bump(id, iso, by) {
   const counts = { ...h.counts };
   if (h.target > 1 && n) counts[iso] = n; else delete counts[iso];
   const done = new Set(h.done);
+  const finished = n >= h.target && !done.has(iso);
   n >= h.target ? done.add(iso) : done.delete(iso);
-  patchHabit(id, { counts, done: [...done].sort() });
+  patchHabit(id, { counts, done: [...done].sort(), ...(finished ? { completedAt: new Date().toISOString() } : {}) });
   return n;
 }
 
@@ -276,16 +277,23 @@ export function habitsSection(rerender) {
 
     const plan = planCard();
     if (plan) sec.append(plan);
-    // Habits still to do today come first; ones finished for today, or for the
-    // whole week, sink to the bottom. Otherwise your own order is kept.
+    // Sorted by when each is next due: today first (earliest reminder first),
+    // then tomorrow, then the day after. Habits finished for today, or for the
+    // whole week, sink to the bottom, the most recently completed first.
+    // Ties keep your own order.
     const ws = weekStart(t), we = addDays(ws, 6);
-    const rank = h => {
-      if (h.done.includes(t)) return 2;
+    const key = h => {
       const week = plannedDates(h, ws, we);
-      if (week.length && week.every(d => h.done.includes(d))) return 2;
-      return isOn(h, t) ? 0 : 1;
+      if (h.done.includes(t) || (week.length && week.every(d => h.done.includes(d)))) {
+        // Newest completion first: invert the timestamp's digits so it sorts descending.
+        return "9" + (h.completedAt ? h.completedAt.replace(/\d/g, c => 9 - c) : "~");
+      }
+      const next = plannedDates(h, t, addDays(t, 13)).find(d => !h.done.includes(d));
+      if (!next) return "8";
+      const first = h.reminders.map(r => r.time).sort()[0] || "99:99";
+      return next + (next === t ? first : "");
     };
-    const sorted = dos.map((h, i) => [rank(h), i, h]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(x => x[2]);
+    const sorted = dos.map((h, i) => [key(h), i, h]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1])).map(x => x[2]);
     if (dos.length) sec.append(holdToReorder(el("div", { class: "rows" }, sorted.map(h => habitRow(h, isOn(h, t))))));
     if (breaks.length) {
       sec.append(el("span", { class: "mono muted", style: "margin-top:4px", text: "DOING LESS OF" }));
