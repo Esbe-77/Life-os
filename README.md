@@ -2,11 +2,11 @@
 
 A calm personal app for your phone, built from five small parts:
 
-- **Home**: today's habits (planned each Sunday, plus habits you're cutting back on, logged each time), a quick energy check-in, this week's priorities, who to reach out to, and decisions waiting on you.
+- **Home**: today's habits (planned each Sunday, plus habits you're cutting back on, logged each time), what's on your mind, this week's priorities, who to reach out to, and decisions waiting on you.
 - **Weekly review**: the same five questions every Sunday (what went well, what drained you, what you avoided, what matters next week, one thing to drop), plus a look back over months.
 - **Decision journal**: write down what you decided, why, and what you expect. When the check-in date comes, it asks how it turned out.
 - **People**: the 15–20 people who matter most, and a gentle nudge when it's been a while.
-- **Energy log**: a few quick 1–5 check-ins a day with tags. After a week it shows what tends to go with better and harder days.
+- **On my mind**: dump whatever keeps going round your head, mark how big it feels, and write how you'll deal with it when you're ready. (This replaced the energy log; old check-ins stay in backups.)
 
 Everything you write stays on your phone. Nothing is sent anywhere. Use **Settings → Save a backup** now and then.
 

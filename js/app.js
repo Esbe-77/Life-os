@@ -16,6 +16,7 @@ const ICONS = {
   decisions: '<path d="M12 3v18"/><path d="M5 6h10l3 3-3 3H5z"/>',
   people: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><path d="M16 4.6a3 3 0 010 6M21 20c0-3-1.6-5.2-4-5.8"/>',
   energy: '<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>',
+  mind: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 00-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0012 3z"/>',
   settings: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   back: '<path d="M15 5l-7 7 7 7"/>',
 };

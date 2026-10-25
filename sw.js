@@ -2,7 +2,7 @@
 // refreshed in the background, so an update shows up on the next launch.
 // Bump VERSION when the file list changes.
 
-const VERSION = "life-os-v6";
+const VERSION = "life-os-v7";
 const APP_FILES = [
   "./",
   "index.html",
@@ -20,6 +20,7 @@ const APP_FILES = [
   "js/modules/decisions.js",
   "js/modules/people.js",
   "js/modules/energy.js",
+  "js/modules/mind.js",
   "icons/icon-192.png",
   "icons/icon-512.png",
   "icons/maskable-512.png",

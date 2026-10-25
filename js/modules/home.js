@@ -11,7 +11,7 @@ import { loadHabits, saveHabits, mergeHabits, habitsSection, renderHabitPage, re
 import review from "./weekly-review.js";
 import decisions from "./decisions.js";
 import people from "./people.js";
-import energy from "./energy.js";
+import mind from "./mind.js";
 
 const ID = "home";
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -52,7 +52,7 @@ export default {
       root.replaceChildren();
       if (view === "plan") { renderPlanPage(root, navigate); return; }
       if (view.startsWith("habit/")) { renderHabitPage(root, view.slice(6), navigate); return; }
-      const sections = [sundayNudge(), habitsSection(render), energySection(), prioritiesSection(), peopleSection(), decisionsSection(), backupNudge()];
+      const sections = [sundayNudge(), habitsSection(render), mindSection(), prioritiesSection(), peopleSection(), decisionsSection(), backupNudge()];
       sections.forEach(s => s && root.append(s));
       window.scrollTo(0, y);
     }
@@ -117,15 +117,17 @@ export default {
           el("span", { class: "pill", style: "--pc:var(--m-decisions)", text: "Look back" })))));
     }
 
-    // ----- energy -----
-    function energySection() {
-      const todays = energy.todayEntries();
-      const last = todays[0];
-      return el("a", { class: "card", href: "#/energy", style: "text-decoration:none;color:inherit;flex-direction:row;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px" },
+    // ----- on my mind -----
+    function mindSection() {
+      const items = mind.openItems();
+      const big = items.filter(i => i.weight === 3).length;
+      return el("a", { class: "card", href: "#/mind", style: "text-decoration:none;color:inherit;flex-direction:row;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px" },
         el("div", { style: "display:flex;flex-direction:column;gap:2px;min-width:0" },
-          el("span", { style: "font-family:var(--font-display);font-size:17px", text: "How are you feeling?" }),
-          el("span", { class: "small muted", text: last ? `Checked in ${todays.length}× today, last at ${energy.timeOf(last)}` : "No check-in yet today" })),
-        el("span", { class: "btn small", style: "flex:none", text: "Check in" }));
+          el("span", { style: "font-family:var(--font-display);font-size:17px", text: "On your mind" }),
+          el("span", { class: "small muted", text: items.length
+            ? `${items.length} thing${items.length === 1 ? "" : "s"}${big ? `, ${big} big` : ""}. Top: ${items[0].text.split("\n")[0].slice(0, 70)}`
+            : "Something going round your head? Dump it here." })),
+        el("span", { class: "btn small", style: "flex:none", text: "Dump" }));
     }
 
     // ----- backup reminder -----
@@ -139,7 +141,7 @@ export default {
     }
 
     render();
-    const offs = ["habits", "weekly-review", "people", "decisions", "energy"].map(k => store.onChange(k, render));
+    const offs = ["habits", "weekly-review", "people", "decisions", "mind"].map(k => store.onChange(k, render));
     const stopTimers = tickTimers(root, () => render());
     const tick = () => { if (document.visibilityState === "visible") { render(); refreshChrome(); } };
     document.addEventListener("visibilitychange", tick);
