@@ -6,6 +6,9 @@ import weeklyReview from "./weekly-review.js";
 import decisions from "./decisions.js";
 import people from "./people.js";
 import energy from "./energy.js";
+import mind from "./mind.js";
 
-export const MODULES = [home, energy, people, decisions, weeklyReview];
-export const TABS = MODULES;
+// Energy is no longer a tab, but stays here so its old check-ins are kept in
+// backups and can still be restored.
+export const MODULES = [home, mind, people, decisions, weeklyReview, energy];
+export const TABS = MODULES.filter(m => m !== energy);

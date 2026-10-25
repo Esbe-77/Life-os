@@ -23,6 +23,9 @@
   --m-people: #a8475a;
   --m-energy: #a5661c;
   --m-habits: #3f7a4a;
+  --m-mind: #a5661c;
+  /* how big something on your mind feels */
+  --w1: #7d8a83; --w2: #b08422; --w3: #a8343f;
 
   /* people: in touch → long overdue */
   --p-ok: #3f7a4a; --p-soon: #b08422; --p-due: #c0602e; --p-long: #a8343f;
@@ -43,6 +46,7 @@
     --q-well: #7dbd86; --q-drained: #e0a35a; --q-avoided: #ab9de0; --q-matters: #7fb3e0; --q-drop: #e88b9c;
     --m-review: #7fb3e0; --m-decisions: #ab9de0; --m-people: #e88b9c; --m-energy: #e0a35a; --m-habits: #7dbd86;
     --s1: #e08a76; --s2: #e0ad6a; --s3: #b5b59a; --s4: #8cc495; --s5: #6cc3a0;
+    --m-mind: #e0a35a; --w1: #9aa69f; --w2: #e0c06a; --w3: #ef7f88;
     --p-ok: #7dbd86; --p-soon: #e0c06a; --p-due: #eb9563; --p-long: #ef7f88;
     color-scheme: dark;
   }
@@ -283,3 +287,11 @@ a.main { color: inherit; text-decoration: none; }
 .pp-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; color: var(--muted); }
 .pp-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .pp-legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--pc); }
+
+/* ---------- on my mind ---------- */
+.mind-row { box-shadow: inset 5px 0 0 var(--wc); padding-left: 20px; }
+.mind-row.done { box-shadow: none; opacity: .7; }
+.mind-row.done .title { text-decoration: line-through; text-decoration-color: var(--muted); }
+.mind-row .title { white-space: pre-wrap; }
+.mind-chip[aria-pressed="true"] { background: var(--wc); border-color: var(--wc); color: var(--paper); }
+#mind-new { min-height: 64px; }
