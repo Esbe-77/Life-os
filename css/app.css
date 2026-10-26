@@ -187,6 +187,13 @@ a.main { color: inherit; text-decoration: none; }
 .hb-stepper { display: inline-flex; align-items: center; gap: 10px; flex: none; }
 .hb-stepper .btn { width: 40px; height: 36px; min-height: 36px; padding: 0; justify-content: center; font-size: 18px; }
 .hb-stepper .mono { min-width: 22px; text-align: center; font-size: 16px; }
+.hb-weekplan { display: flex; flex-direction: column; gap: 10px; }
+.hb-day { gap: 10px; padding: 14px 16px; }
+.hb-day h3 { font-size: 17px; margin: 0; }
+.hb-day.today { border-color: var(--m-habits); }
+.hb-day.past { opacity: .7; }
+.hb-day .chip[aria-pressed="true"] { background: var(--m-habits); border-color: var(--m-habits); color: var(--paper); }
+.hb-day .chip.done[aria-pressed="false"] { border-color: var(--m-habits); color: var(--m-habits); }
 .hb-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
 .hb-days .chip { padding: 6px 0; display: flex; flex-direction: column; align-items: center; line-height: 1.15; border-radius: 12px; min-width: 0; }
 .hb-days .chip small { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
