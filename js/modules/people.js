@@ -106,6 +106,17 @@ export default {
 
   mount(root, { view, navigate, refreshChrome }) {
     let all = loadAll();
+    // After "Talked today" the row offers Undo for a few seconds, then the list
+    // re-sorts so the person drops to their new place. moved marks that row.
+    let settle = null, moved = null;
+    const settleSoon = id => {
+      clearTimeout(settle);
+      settle = setTimeout(() => {
+        settle = null; moved = id;
+        const r = root.querySelector(".pp-row.logged");
+        if (r) { r.classList.add("leaving"); setTimeout(render, 220); } else render();
+      }, 2500);
+    };
 
     function render() {
       root.replaceChildren();
@@ -140,6 +151,7 @@ export default {
       const rows = el("div", { class: "rows" });
       people.forEach(p => rows.append(personRow(p)));
       root.append(rows);
+      moved = null;
       root.append(el("div", { class: "actions" },
         el("a", { class: "btn", href: `#/${ID}/add` }, "Add a person"),
         el("span", { class: "mono muted", text: `${people.length} ${people.length === 1 ? "person" : "people"}${people.length > 20 ? " · a shorter list is easier to keep up" : ""}` })));
@@ -153,18 +165,19 @@ export default {
           ? el("span", { class: "pill", style: `--pc:${st.color}`, text: "Today" })
           : el("button", { class: "btn small", "aria-label": `Talked to ${p.name} today`, onclick: () => {
               const prev = logToday(all, p.id); all = loadAll(); p = all[p.id];
-              right.replaceChildren(el("span", { class: "pill", style: "--pc:var(--q-well)", text: "Logged" }),
-                el("button", { class: "linkbtn", onclick: () => {
+              right.replaceChildren(el("button", { class: "btn small", onclick: () => {
+                  clearTimeout(settle); settle = null;
                   all[p.id] = { ...all[p.id], contacts: prev }; saveAll(all); render();
                 } }, "Undo"));
               meta.textContent = `${sinceText(p)} · every ${everyLabel(p.every)}`;
-              row.className = "row pp-row ok"; row.style.setProperty("--pc", "var(--p-ok)"); bar.style.width = "0%";
+              row.className = "row pp-row ok logged"; row.style.setProperty("--pc", "var(--p-ok)"); bar.style.width = "0%";
+              settleSoon(p.id);
             } }, "Talked today"));
       const meta = el("span", { class: "meta", text: `${sinceText(p)} · every ${everyLabel(p.every)}` });
       const u = urgency(p);
       const bar = el("i", { style: `width:${Math.min(u, 1) * 100}%` });
       drawIdle();
-      const row = el("div", { class: `row pp-row ${st.key}`, style: `--pc:${st.color}`, title: st.label },
+      const row = el("div", { class: `row pp-row ${st.key}${moved === p.id ? " arrived" : ""}`, style: `--pc:${st.color}`, title: st.label },
         el("a", { class: "main", href: `#/${ID}/${p.id}` },
           el("span", { class: "title", text: p.name }), meta,
           el("span", { class: "pp-bar", "aria-hidden": "true" }, bar)),
@@ -262,7 +275,7 @@ export default {
     const off = store.onChange(ID, () => { all = loadAll(); if (!view) render(); });
     return {
       setView(v) { view = v; all = loadAll(); render(); window.scrollTo(0, 0); },
-      unmount() { off(); },
+      unmount() { off(); clearTimeout(settle); },
     };
   },
 };
