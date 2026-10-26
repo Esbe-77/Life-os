@@ -7,7 +7,7 @@
 import * as store from "../store.js";
 import * as backup from "../backup.js";
 import { el, addDays, parseDate, formatDate } from "../ui.js";
-import { loadHabits, saveHabits, mergeHabits, habitsSection, renderHabitPage, renderPlanPage, planTitle, tickTimers, getHabit } from "../habits.js";
+import { loadHabits, saveHabits, mergeHabits, habitsSection, renderHabitPage, renderPlanPage, renderWeekPage, planTitle, tickTimers, getHabit } from "../habits.js";
 import review from "./weekly-review.js";
 import decisions from "./decisions.js";
 import people from "./people.js";
@@ -32,7 +32,7 @@ export default {
   icon: "home",
   color: "var(--accent)",
 
-  title(view) { return view === "plan" ? planTitle() : view.startsWith("habit/") ? (getHabit(view.slice(6))?.name || "Habit") : greeting(); },
+  title(view) { return view === "plan" ? planTitle() : view === "week" ? "This week" : view.startsWith("habit/") ? (getHabit(view.slice(6))?.name || "Habit") : greeting(); },
   backTo(view) { return view ? "home" : null; },
   subtitle(view) { if (view) return ""; const d = new Date(); return `${DAYS[d.getDay()]} ${d.getDate()} ${LONG_MONTHS[d.getMonth()]}`; },
   hasData() { return loadHabits().length > 0; },
@@ -52,6 +52,7 @@ export default {
       const y = window.scrollY;
       root.replaceChildren();
       if (view === "plan") { renderPlanPage(root, navigate); return; }
+      if (view === "week") { renderWeekPage(root, navigate); return; }
       if (view.startsWith("habit/")) { renderHabitPage(root, view.slice(6), navigate); return; }
       const sections = [sundayNudge(), habitsSection(render), goalsSection(), mindSection(), prioritiesSection(), peopleSection(), decisionsSection(), backupNudge()];
       sections.forEach(s => s && root.append(s));

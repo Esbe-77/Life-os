@@ -259,6 +259,7 @@ export function habitsSection(rerender) {
       reordering
         ? el("button", { class: "linkbtn", onclick: () => { reordering = false; rerender(); } }, "Done")
         : habits.length ? el("span", { class: "tools", style: "gap:16px" },
+            habits.some(h => h.kind === "do") && !adding ? el("a", { class: "linkbtn", href: "#/home/week" }, "Week") : null,
             habits.length > 1 && !adding ? el("button", { class: "linkbtn", onclick: () => { reordering = true; rerender(); } }, "Reorder") : null,
             el("button", { class: "linkbtn", onclick: () => { adding = !adding; draw(); if (adding) sec.querySelector("#habit-new")?.focus(); } }, adding ? "Done" : "Add")) : null));
 
@@ -494,6 +495,47 @@ export function renderPlanPage(root, navigate) {
       habits.forEach(h => { if (!daysFor(h, ws)) setPlan(h.id, ws, []); }); // a habit left blank is planned as a week off
       navigate("home");
     } }, "Done"))].filter(Boolean));
+}
+
+// ---------- this week, day by day (#/home/week) ----------
+// Each day lists every habit; tap one to plan or unplan it for that day.
+// Days already gone just show what was planned and what got done.
+export function renderWeekPage(root, navigate) {
+  const t = today(), ws = weekStart(t);
+  const redraw = () => { const y = window.scrollY; root.replaceChildren(); renderWeekPage(root, navigate); window.scrollTo(0, y); };
+  const habits = doHabits();
+  if (!habits.length) { root.append(el("p", { class: "muted", text: "No habits to plan yet. Add one on Home." })); return; }
+
+  const toggle = (h, iso) => {
+    const n = parseDate(iso).getDay(), days = daysFor(h, ws) || [];
+    // A habit with the same days every week keeps them from next week on.
+    const next = addDays(ws, 7);
+    if (h.fixed && !h.plans[next] && daysFor(h, next)) setPlan(h.id, next, daysFor(h, next));
+    setPlan(h.id, ws, days.includes(n) ? days.filter(x => x !== n) : [...days, n]);
+    redraw();
+  };
+
+  root.append(el("p", { class: "small muted", text: `${shortDate(ws)} to ${shortDate(addDays(ws, 6))}. Tap a habit to add it to a day or take it off.` }));
+  root.append(el("div", { class: "hb-weekplan" }, weekDates(ws).map(iso => {
+    const past = iso < t, d = parseDate(iso);
+    const shown = past ? habits.filter(h => isOn(h, iso) || countOn(h, iso)) : habits;
+    const planned = habits.filter(h => isOn(h, iso)).length;
+    return el("div", { class: "card hb-day" + (iso === t ? " today" : "") + (past ? " past" : "") },
+      el("div", { class: "rowhead" },
+        el("h3", { text: `${DAY_NAMES[d.getDay()]} ${d.getDate()}` }),
+        el("span", { class: "mono muted", text: iso === t ? "TODAY" : planned ? `${planned} planned` : "nothing planned" })),
+      shown.length ? el("div", { class: "chips" }, shown.map(h => {
+        const on = isOn(h, iso), n = countOn(h, iso), done = n >= h.target;
+        const label = (done ? "✓ " : "") + h.name + (h.target > 1 && n && !done ? ` ${n}/${h.target}` : "");
+        return past
+          ? el("span", { class: "chip", "aria-pressed": String(done) }, label) // filled once done; planned but missed stays plain
+          : el("button", { type: "button", class: "chip" + (done ? " done" : ""), "aria-pressed": String(on), onclick: () => toggle(h, iso) }, label);
+      })) : el("p", { class: "small muted", text: "Nothing planned." }));
+  })));
+  const nextPlan = planWeek() > ws;
+  root.append(el("div", { class: "actions" },
+    nextPlan ? el("a", { class: "btn", href: "#/home/plan" }, "Plan next week") : null,
+    el("button", { class: "btn primary", onclick: () => navigate("home") }, "Done")));
 }
 
 // ---------- one habit's page ----------

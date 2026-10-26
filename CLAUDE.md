@@ -20,7 +20,7 @@ js/app.js             router (#/<moduleId>/<view>), tab bar, settings page
 js/store.js           on-device storage: one JSON document per module in localStorage ("lifeos.v1.<id>")
 js/backup.js          one backup file for everything; restore; share/download
 js/ui.js              el() DOM helper, date/time pickers, hold-and-drag sortable(), date helpers ("YYYY-MM-DD" local dates)
-js/habits.js          habits on Home: weekly plans, habits to break (logged times), reminders, timers, their pages
+js/habits.js          habits on Home: weekly plans (Sunday planner, and a day-by-day Week page to re-plan mid-week), habits to break (logged times), reminders, timers, their pages
 js/reminders.js       builds the phone's reminder list (habits, Sunday review, decision check-ins) and sends it to the app
 js/modules/index.js   module list, in tab-bar order
 js/modules/*.js       home (dashboard + habits), goals (steps, linked habits), mind (things on your mind), weekly-review, decisions, people, energy (no longer a tab; kept for old data)
