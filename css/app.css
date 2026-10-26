@@ -282,6 +282,11 @@ a.main { color: inherit; text-decoration: none; }
 .pp-row { box-shadow: inset 5px 0 0 var(--pc); padding-left: 20px; }
 .pp-row.due, .pp-row.long { background: color-mix(in srgb, var(--pc) 9%, var(--paper)); }
 .pp-row.long .title { color: var(--pc); }
+.pp-row { transition: opacity .22s ease; }
+.pp-row.leaving { opacity: 0; }
+.pp-row.arrived { animation: pp-arrive 1.2s ease; }
+@keyframes pp-arrive { from { background: color-mix(in srgb, var(--pc) 22%, var(--paper)); } }
+@media (prefers-reduced-motion: reduce) { .pp-row, .pp-row.arrived { transition: none; animation: none; } }
 .pp-bar { display: block; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin-top: 5px; max-width: 160px; }
 .pp-bar > i { display: block; height: 100%; background: var(--pc); border-radius: 2px; }
 .pp-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; color: var(--muted); }
