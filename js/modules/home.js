@@ -1,4 +1,4 @@
-// Home: the one calm page. Habits for today, this week's priorities,
+// Home: the one calm page. Habits for today, goals' next steps, this week's priorities,
 // the weekly review, who to reach out to, and decisions waiting on you.
 // It owns the habits list; everything else it reads from the other modules.
 //
@@ -12,6 +12,7 @@ import review from "./weekly-review.js";
 import decisions from "./decisions.js";
 import people from "./people.js";
 import mind from "./mind.js";
+import goals from "./goals.js";
 
 const ID = "home";
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -52,7 +53,7 @@ export default {
       root.replaceChildren();
       if (view === "plan") { renderPlanPage(root, navigate); return; }
       if (view.startsWith("habit/")) { renderHabitPage(root, view.slice(6), navigate); return; }
-      const sections = [sundayNudge(), habitsSection(render), mindSection(), prioritiesSection(), peopleSection(), decisionsSection(), backupNudge()];
+      const sections = [sundayNudge(), habitsSection(render), goalsSection(), mindSection(), prioritiesSection(), peopleSection(), decisionsSection(), backupNudge()];
       sections.forEach(s => s && root.append(s));
       window.scrollTo(0, y);
     }
@@ -118,6 +119,17 @@ export default {
     }
 
     // ----- on my mind -----
+    // ----- goals: each active goal's next step, ready to tick -----
+    function goalsSection() {
+      const list = goals.activeGoals();
+      if (!list.length) return null;
+      return el("section", { class: "section" },
+        el("div", { class: "rowhead" },
+          el("h2", { text: "Goals" }),
+          el("a", { class: "linkbtn", href: "#/goals" }, list.length > 3 ? `All ${list.length}` : "Open")),
+        el("div", { class: "rows" }, list.slice(0, 3).map(g => goals.goalRow(g, render))));
+    }
+
     function mindSection() {
       const items = mind.openItems();
       const big = items.filter(i => i.weight === 3).length;
@@ -141,7 +153,7 @@ export default {
     }
 
     render();
-    const offs = ["habits", "weekly-review", "people", "decisions", "mind"].map(k => store.onChange(k, render));
+    const offs = ["habits", "weekly-review", "people", "decisions", "mind", "goals"].map(k => store.onChange(k, render));
     const stopTimers = tickTimers(root, () => render());
     const tick = () => { if (document.visibilityState === "visible") { render(); refreshChrome(); } };
     document.addEventListener("visibilitychange", tick);

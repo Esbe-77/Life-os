@@ -213,16 +213,22 @@ function weekSummary(h, ws = weekStart(today())) {
   return { dates, planned, done };
 }
 
-// One line per habit for a week (used by the weekly review).
+// One line per habit for a week (used by the weekly review and goals).
+function weekLine(h, ws) {
+  const s = weekSummary(h, ws);
+  if (h.kind === "break") {
+    const before = countIn(h, addDays(ws, -7), addDays(ws, -1));
+    return { id: h.id, name: h.name, text: `${s.count} time${s.count === 1 ? "" : "s"}${before || s.count ? ` (week before: ${before})` : ""}` };
+  }
+  return { id: h.id, name: h.name, text: s.planned ? `${s.done} of ${s.planned} days` : `${s.done} day${s.done === 1 ? "" : "s"}, not planned` };
+}
 export function weekLines(ws) {
-  return loadHabits().filter(h => new Date(h.createdAt) <= new Date(addDays(ws, 7))).map(h => {
-    const s = weekSummary(h, ws);
-    if (h.kind === "break") {
-      const before = countIn(h, addDays(ws, -7), addDays(ws, -1));
-      return { name: h.name, text: `${s.count} time${s.count === 1 ? "" : "s"}${before || s.count ? ` (week before: ${before})` : ""}` };
-    }
-    return { name: h.name, text: s.planned ? `${s.done} of ${s.planned} days` : `${s.done} day${s.done === 1 ? "" : "s"}, not planned` };
-  });
+  return loadHabits().filter(h => new Date(h.createdAt) <= new Date(addDays(ws, 7))).map(h => weekLine(h, ws));
+}
+// This week's line for one habit, or null if it's gone.
+export function habitThisWeek(id) {
+  const h = getHabit(id);
+  return h ? weekLine(h, weekStart(today())) : null;
 }
 
 function nextOn(h) {

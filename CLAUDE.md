@@ -23,7 +23,7 @@ js/ui.js              el() DOM helper, date/time pickers, hold-and-drag sortable
 js/habits.js          habits on Home: weekly plans, habits to break (logged times), reminders, timers, their pages
 js/reminders.js       builds the phone's reminder list (habits, Sunday review, decision check-ins) and sends it to the app
 js/modules/index.js   module list, in tab-bar order
-js/modules/*.js       home (dashboard + habits), mind (things on your mind), weekly-review, decisions, people, energy (no longer a tab; kept for old data)
+js/modules/*.js       home (dashboard + habits), goals (steps, linked habits), mind (things on your mind), weekly-review, decisions, people, energy (no longer a tab; kept for old data)
 sw.js                 offline cache (web install only; the Android app skips it)
 android/              native shell: one WebView serving the web files from the APK (copied in at build time)
 .github/workflows/    builds the APK on every push and publishes it as a GitHub release
