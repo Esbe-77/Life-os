@@ -245,9 +245,9 @@ export default {
         el("div", {},
           el("div", { class: "k", text: "Goals" }),
           list.map(g => {
-            const next = goals.nextStep(g);
+            const next = goals.nextSteps(g).map(n => (n.track ? `${n.track.name}: ` : "") + n.step.text).join("; ");
             return el("div", { class: "v small" }, el("a", { href: `#/goals/${g.id}`, text: g.title }), " ",
-              el("span", { class: "muted", text: `${goals.stepsText(g)}${next ? `. Next: ${next.text}` : ""}` }));
+              el("span", { class: "muted", text: `${goals.stepsText(g)}${next ? `. Next: ${next}` : ""}` }));
           }),
           el("a", { class: "btn small", href: "#/goals", style: "margin-top:10px;display:inline-flex" }, "Update goals")));
     }

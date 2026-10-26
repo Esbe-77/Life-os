@@ -1,10 +1,13 @@
 // Goals: a few things you want to make happen, each with why it matters, what
 // done looks like, small steps (the first unticked one is the next step) and
 // the habits that move it along. Home and the weekly review show the next steps.
+// Steps can be split into tracks that run side by side, each with its own
+// next step.
 //
 // Data (store key "goals"):
 //   { goals: [ { id, title, why, finish, due ("YYYY-MM-DD" or ""),
-//                steps: [ { id, text, done, doneAt } ], habits: [habit ids],
+//                tracks: [ { id, name } ] (none means one plain list),
+//                steps: [ { id, text, done, doneAt, track } ], habits: [habit ids],
 //                status: "active" | "someday" | "achieved" | "dropped",
 //                createdAt, updatedAt, achievedAt } ] }
 
@@ -22,11 +25,19 @@ const today = () => isoDate(new Date());
 function loadGoals() {
   const d = store.load(ID, { goals: [] });
   return (Array.isArray(d.goals) ? d.goals : []).filter(g => g?.id && typeof g.title === "string")
-    .map(g => ({ why: "", finish: "", due: "", steps: [], habits: [], status: "active", ...g }));
+    .map(g => ({ why: "", finish: "", due: "", tracks: [], steps: [], habits: [], status: "active", ...g }));
 }
 function saveGoals(goals) { return store.save(ID, { goals }); }
 
-const nextStep = g => g.steps.find(s => !s.done) || null;
+// A step belongs to its track, or to the first track if its own is gone.
+const trackOf = (g, s) => g.tracks.some(t => t.id === s.track) ? s.track : g.tracks[0]?.id;
+const stepsIn = (g, trackId) => g.tracks.length ? g.steps.filter(s => trackOf(g, s) === trackId) : g.steps;
+// The next step of each track: [{ step, track }] (track is null without tracks).
+function nextSteps(g) {
+  if (!g.tracks.length) { const s = g.steps.find(x => !x.done); return s ? [{ step: s, track: null }] : []; }
+  return g.tracks.map(t => ({ step: stepsIn(g, t.id).find(x => !x.done), track: t })).filter(x => x.step);
+}
+const nextStep = g => nextSteps(g)[0]?.step || null;
 const progress = g => g.steps.length ? g.steps.filter(s => s.done).length / g.steps.length : 0;
 // Active goals, soonest due first, then oldest first.
 const byDue = (a, b) => (a.due || "9999").localeCompare(b.due || "9999") || a.createdAt.localeCompare(b.createdAt);
@@ -47,29 +58,45 @@ function stepsText(g) {
   return `${g.steps.filter(s => s.done).length} of ${g.steps.length} steps`;
 }
 
-// Ticks a goal's next step. Shared with Home.
-function tickNext(id) {
-  const goals = loadGoals(), g = goals.find(x => x.id === id), s = g && nextStep(g);
-  if (!s) return;
+// Ticks one of a goal's steps (its next step by default). Shared with Home.
+function tickNext(id, stepId) {
+  const goals = loadGoals(), g = goals.find(x => x.id === id);
+  const s = g && (stepId ? g.steps.find(x => x.id === stepId) : nextStep(g));
+  if (!s || s.done) return;
   s.done = true; s.doneAt = now(); g.updatedAt = now();
   saveGoals(goals);
-  if (!nextStep(g)) ding();
+  if (g.steps.every(x => x.done)) ding();
 }
 
-// A goal as a row: title, progress, and the next step with a tick.
+// A goal as a row: title, progress, and the next step with a tick (one per
+// track when the goal has tracks).
 function goalRow(g, onChange) {
-  const step = nextStep(g), p = progress(g);
+  const next = nextSteps(g), p = progress(g);
   const due = dueText(g);
   const late = g.due && g.due < today();
-  return el("div", { class: "row goal-row" },
-    step
-      ? el("button", { class: "goal-tick", "aria-label": `Tick off: ${step.text}`, onclick: () => { tickNext(g.id); onChange(); } })
-      : el("span", { class: "goal-tick none", "aria-hidden": "true" }),
-    el("a", { class: "main", href: `#/${ID}/${g.id}` },
-      el("span", { class: "title", text: g.title }),
-      el("span", { class: "meta goal-next", text: step ? `Next: ${step.text}` : g.steps.length ? "All steps done. Tap to mark it achieved." : "Tap to add the first small step." }),
-      el("span", { class: "goal-bar", "aria-hidden": "true" }, el("i", { style: `width:${p * 100}%` })),
-      el("span", { class: "meta mono", style: late ? "color:var(--q-drop)" : "", text: [stepsText(g), due.replace(/^by [^·]*· /, "")].filter(Boolean).join(" · ") })));
+  const tick = ({ step }) => el("button", { class: "goal-tick", "aria-label": `Tick off: ${step.text}`, onclick: () => { tickNext(g.id, step.id); onChange(); } });
+  const empty = g.steps.length ? "All steps done. Tap to mark it achieved." : "Tap to add the first small step.";
+  const foot = [
+    el("span", { class: "goal-bar", "aria-hidden": "true" }, el("i", { style: `width:${p * 100}%` })),
+    el("span", { class: "meta mono", style: late ? "color:var(--q-drop)" : "", text: [stepsText(g), due.replace(/^by [^·]*· /, "")].filter(Boolean).join(" · ") })];
+  if (g.tracks.length < 2) {
+    return el("div", { class: "row goal-row" },
+      next.length ? tick(next[0]) : el("span", { class: "goal-tick none", "aria-hidden": "true" }),
+      el("a", { class: "main", href: `#/${ID}/${g.id}` },
+        el("span", { class: "title", text: g.title }),
+        el("span", { class: "meta goal-next", text: next.length ? `Next: ${next[0].step.text}` : empty }),
+        foot));
+  }
+  // Several tracks: a tick for each track's next step, under the title.
+  const open = () => { location.hash = `#/${ID}/${g.id}`; };
+  return el("div", { class: "row goal-row", onclick: e => { if (!e.target.closest("button")) open(); } },
+    el("div", { class: "main" },
+      el("a", { class: "title", href: `#/${ID}/${g.id}`, text: g.title }),
+      next.length
+        ? el("div", { class: "goal-nexts" }, next.map(n => el("div", { class: "goal-nextline" }, tick(n),
+            el("span", { class: "meta goal-next" }, el("span", { class: "goal-track", text: `${n.track.name}: ` }), n.step.text))))
+        : el("span", { class: "meta goal-next", text: empty }),
+      foot));
 }
 
 export default {
@@ -84,7 +111,7 @@ export default {
 
   // For Home and the weekly review.
   activeGoals() { return active(loadGoals()); },
-  nextStep, stepsText, dueText, tickNext, goalRow,
+  nextStep, nextSteps, stepsText, dueText, tickNext, goalRow,
 
   exportData() { return { goals: loadGoals() }; },
   importData(data) {
@@ -206,37 +233,124 @@ export default {
 
     function stepsCard(g) {
       const card = el("section", { class: "card", style: "--fc:var(--m-goals);gap:10px" });
+      let naming = false; // the "new track" box is open
       const draw = () => {
         g = goals.find(x => x.id === g.id);
         const done = g.steps.filter(s => s.done).length;
-        const input = el("input", { id: "goal-step", type: "text", maxlength: 140, placeholder: g.steps.length ? "Add a step" : "The first small step", "aria-label": "New step" });
-        const add = () => {
-          const text = input.value.trim();
-          if (!text) { input.focus(); return; }
-          patch(g.id, { steps: [...g.steps, { id: newId(), text, done: false, doneAt: null }] });
-          draw(); card.querySelector("#goal-step")?.focus();
+        const setGoal = p => { patch(g.id, p); draw(); };
+        const setSteps = steps => setGoal({ steps });
+
+        // Tap a step's words to edit them; Enter or tapping away saves.
+        const editable = s => {
+          const span = el("span", { class: "goal-step-text", text: s.text, role: "button", tabindex: "0", "aria-label": `Edit step: ${s.text}` });
+          const edit = () => {
+            const input = el("input", { type: "text", class: "goal-step-edit", maxlength: 140, value: s.text, "aria-label": "Edit step" });
+            let finished = false;
+            const finish = keep => {
+              if (finished) return; finished = true;
+              const text = input.value.trim();
+              if (keep && text && text !== s.text) setSteps(g.steps.map(x => x.id === s.id ? { ...x, text } : x));
+              else draw();
+            };
+            input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); finish(true); } else if (e.key === "Escape") finish(false); });
+            input.addEventListener("blur", () => finish(true));
+            span.replaceWith(input); input.focus(); input.setSelectionRange(input.value.length, input.value.length);
+          };
+          span.addEventListener("click", edit);
+          span.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); edit(); } });
+          return span;
         };
-        input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
-        const setSteps = steps => { patch(g.id, { steps }); draw(); };
-        const list = el("div", { class: "goal-steps sortable" }, g.steps.map(s =>
-          el("div", { class: "goal-step" + (s.done ? " done" : "") },
-            el("button", { class: "goal-tick" + (s.done ? " on" : ""), "aria-pressed": String(s.done), "aria-label": s.done ? `Untick: ${s.text}` : `Tick off: ${s.text}`,
-              onclick: () => {
-                const steps = g.steps.map(x => x.id === s.id ? { ...x, done: !x.done, doneAt: x.done ? null : now() } : x);
-                setSteps(steps);
-                if (!s.done && steps.every(x => x.done)) ding();
-              } }, s.done ? "✓" : ""),
-            el("span", { class: "goal-step-text", text: s.text }),
-            el("button", { class: "linkbtn goal-del", "aria-label": `Remove step: ${s.text}`, onclick: () => setSteps(g.steps.filter(x => x.id !== s.id)) }, "×"),
-            el("span", { class: "drag-handle", "data-drag": "", "aria-hidden": "true", text: "⠿" }))));
-        sortable(list, (from, to) => setSteps(moveItem([...g.steps], from, to)));
+
+        const stepRow = s => el("div", { class: "goal-step" + (s.done ? " done" : "") },
+          el("button", { class: "goal-tick" + (s.done ? " on" : ""), "aria-pressed": String(s.done), "aria-label": s.done ? `Untick: ${s.text}` : `Tick off: ${s.text}`,
+            onclick: () => {
+              const steps = g.steps.map(x => x.id === s.id ? { ...x, done: !x.done, doneAt: x.done ? null : now() } : x);
+              setSteps(steps);
+              if (!s.done && steps.every(x => x.done)) ding();
+            } }, s.done ? "✓" : ""),
+          editable(s),
+          el("button", { class: "linkbtn goal-del", "aria-label": `Remove step: ${s.text}`, onclick: () => setSteps(g.steps.filter(x => x.id !== s.id)) }, "×"),
+          el("span", { class: "drag-handle", "data-drag": "", "aria-hidden": "true", text: "⠿" }));
+
+        // One list of steps (a track's, or the whole goal's), draggable within itself.
+        const stepList = trackId => {
+          const mine = stepsIn(g, trackId);
+          const list = el("div", { class: "goal-steps sortable" }, mine.map(stepRow));
+          sortable(list, (from, to) => {
+            const at = mine.map(x => g.steps.indexOf(x)), moved = moveItem(mine, from, to), steps = [...g.steps];
+            at.forEach((i, k) => { steps[i] = moved[k]; });
+            setSteps(steps);
+          });
+          return mine.length ? list : null;
+        };
+        const addStep = (trackId, placeholder) => {
+          const input = el("input", { type: "text", maxlength: 140, placeholder, "aria-label": "New step", "data-track": trackId || "" });
+          const add = () => {
+            const text = input.value.trim();
+            if (!text) { input.focus(); return; }
+            setSteps([...g.steps, { id: newId(), text, done: false, doneAt: null, ...(trackId ? { track: trackId } : {}) }]);
+            card.querySelector(`input[data-track="${trackId || ""}"]`)?.focus();
+          };
+          input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
+          return el("div", { class: "goal-add" }, input, el("button", { class: "btn", onclick: add }, "Add"));
+        };
+
+        // Adding a track. The first one takes the steps already there.
+        const trackBox = () => {
+          if (!naming) return el("button", { class: "linkbtn", style: "align-self:flex-start", onclick: () => { naming = true; draw(); card.querySelector("#goal-track-new")?.focus(); } },
+            g.tracks.length ? "Add a track" : "Split into tracks");
+          const input = el("input", { id: "goal-track-new", type: "text", maxlength: 40, placeholder: g.tracks.length ? "Track name, like Diet" : "First track, like Training", "aria-label": "Track name" });
+          const add = () => {
+            const name = input.value.trim();
+            if (!name) { input.focus(); return; }
+            const t = { id: newId(), name };
+            naming = false;
+            setGoal({ tracks: [...g.tracks, t], steps: g.tracks.length ? g.steps : g.steps.map(x => ({ ...x, track: t.id })) });
+          };
+          input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } else if (e.key === "Escape") { naming = false; draw(); } });
+          return el("div", { style: "display:flex;flex-direction:column;gap:6px" },
+            g.tracks.length ? null : el("p", { class: "small muted", text: "Tracks are things you work on side by side. Each has its own steps and its own next step." }),
+            el("div", { class: "goal-add" }, input, el("button", { class: "btn", onclick: add }, "Add"),
+              el("button", { class: "linkbtn", style: "color:var(--muted)", onclick: () => { naming = false; draw(); } }, "Cancel")));
+        };
+
+        // A track: its name (tap to rename), steps, and its own add box.
+        const trackSection = t => {
+          const mine = stepsIn(g, t.id);
+          const name = el("input", { type: "text", class: "goal-track-name", maxlength: 40, value: t.name, "aria-label": "Track name" });
+          name.addEventListener("change", () => {
+            const v = name.value.trim();
+            if (v) setGoal({ tracks: g.tracks.map(x => x.id === t.id ? { ...x, name: v } : x) }); else name.value = t.name;
+          });
+          name.addEventListener("keydown", e => { if (e.key === "Enter") name.blur(); });
+          const tools = el("span", { class: "tools" });
+          const idle = () => tools.replaceChildren(
+            el("span", { class: "mono muted", text: mine.length ? `${mine.filter(x => x.done).length} of ${mine.length}` : "" }),
+            el("button", { class: "linkbtn goal-del", "aria-label": `Remove track ${t.name}`, onclick: () => mine.length ? ask() : remove() }, "×"));
+          const remove = () => setGoal({ tracks: g.tracks.filter(x => x.id !== t.id), steps: g.steps.filter(x => !mine.includes(x)) });
+          const ask = () => tools.replaceChildren(
+            el("span", { class: "small", text: `Remove it and its ${mine.length} step${mine.length === 1 ? "" : "s"}?` }),
+            el("button", { class: "btn small danger", onclick: remove }, "Remove"),
+            el("button", { class: "btn small", onclick: idle }, "Keep"));
+          idle();
+          return el("div", { class: "goal-track-box" },
+            el("div", { class: "goal-track-head" }, name, tools),
+            stepList(t.id),
+            addStep(t.id, mine.length ? "Add a step" : "The first small step"));
+        };
+
+        const intro = !g.steps.length && !g.tracks.length
+          ? el("p", { class: "small muted", text: "Break it down until each step feels easy to start. The first unticked step is your next step, and it shows on Home." }) : null;
         card.replaceChildren(...[
           el("div", { class: "rowhead" },
             el("h2", { style: "font-size:19px;font-weight:500", text: "Steps" }),
             g.steps.length ? el("span", { class: "mono muted", text: `${done} of ${g.steps.length} done` }) : null),
-          g.steps.length ? null : el("p", { class: "small muted", text: "Break it down until each step feels easy to start. The first unticked step is your next step, and it shows on Home." }),
-          g.steps.length ? list : null,
-          el("div", { class: "goal-add" }, input, el("button", { class: "btn", onclick: add }, "Add"))].filter(Boolean));
+          intro,
+          ...(g.tracks.length
+            ? g.tracks.map(trackSection)
+            : [stepList(null), addStep(null, g.steps.length ? "Add a step" : "The first small step")]),
+          trackBox(),
+          g.steps.length ? el("p", { class: "small muted", style: "margin:0", text: "Tap a step to change it. Drag ⠿ to reorder." }) : null].filter(Boolean));
       };
       draw();
       return card;

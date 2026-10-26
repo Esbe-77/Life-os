@@ -241,6 +241,9 @@ const timeOf = at => at.slice(11, 16);
 // ---------- the section on Home ----------
 let justLogged = null; // { habitId, entryId, until } so a mistaken tap can be undone
 let reordering = false; // Home shows drag handles instead of ticks while true
+// Whether Home shows the habits not planned for today (remembered on this phone).
+let showLater = !!store.getMeta().showLaterHabits;
+const rememberFold = () => store.setMeta({ showLaterHabits: showLater });
 
 export function habitsSection(rerender) {
   settleTimers();
@@ -300,7 +303,14 @@ export function habitsSection(rerender) {
       return next + (next === t ? first : "");
     };
     const sorted = dos.map((h, i) => [key(h), i, h]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1])).map(x => x[2]);
-    if (dos.length) sec.append(holdToReorder(el("div", { class: "rows" }, sorted.map(h => habitRow(h, isOn(h, t))))));
+    // Habits not planned for today fold into one row, to keep Home tidy.
+    const onToday = sorted.filter(h => isOn(h, t)), later = sorted.filter(h => !isOn(h, t));
+    const fold = later.length ? el("button", { class: "row hb-fold", "aria-expanded": String(showLater), onclick: () => { showLater = !showLater; rememberFold(); draw(); } },
+      el("span", { class: "main" }, el("span", { class: "title", text: `Not today (${later.length})` }),
+        el("span", { class: "meta", text: showLater ? "Tap to hide" : later.map(h => h.name).join(", ") })),
+      el("span", { class: "hb-chev", "aria-hidden": "true", text: "⌄" })) : null;
+    if (dos.length) sec.append(holdToReorder(el("div", { class: "rows" },
+      onToday.map(h => habitRow(h, true)), fold, showLater ? later.map(h => habitRow(h, false)) : null)));
     if (breaks.length) {
       sec.append(el("span", { class: "mono muted", style: "margin-top:4px", text: "DOING LESS OF" }));
       sec.append(holdToReorder(el("div", { class: "rows" }, breaks.map(breakRow))));
