@@ -322,7 +322,9 @@ a.main { color: inherit; text-decoration: none; }
 .goal-step.done .goal-step-text { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--muted); }
 .goal-del { text-decoration: none; font-size: 20px; color: var(--muted); padding: 0 4px; }
 .goal-step-text { cursor: text; }
-.goal-step-edit { flex: 1; min-width: 0; padding: 6px 10px !important; font-size: 16px !important; }
+.goal-step-editor { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+.goal-step-editor:first-child { border-top: 0; }
+.goal-step-edit { min-height: 0 !important; resize: none; overflow: hidden; font-size: 16px !important; line-height: 1.45 !important; }
 .goal-track-box { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
 .goal-track-head { display: flex; align-items: center; gap: 8px; }
 .goal-track-name { flex: 1; min-width: 0; border-color: transparent !important; background: transparent !important; padding: 4px 6px !important; margin-left: -6px; font-family: var(--font-display); font-size: 17px !important; color: var(--m-goals); }

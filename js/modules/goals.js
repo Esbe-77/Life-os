@@ -240,21 +240,23 @@ export default {
         const setGoal = p => { patch(g.id, p); draw(); };
         const setSteps = steps => setGoal({ steps });
 
-        // Tap a step's words to edit them; Enter or tapping away saves.
+        // Tap a step's words to edit them in a full-width box that grows to fit.
         const editable = s => {
           const span = el("span", { class: "goal-step-text", text: s.text, role: "button", tabindex: "0", "aria-label": `Edit step: ${s.text}` });
           const edit = () => {
-            const input = el("input", { type: "text", class: "goal-step-edit", maxlength: 140, value: s.text, "aria-label": "Edit step" });
-            let finished = false;
-            const finish = keep => {
-              if (finished) return; finished = true;
-              const text = input.value.trim();
-              if (keep && text && text !== s.text) setSteps(g.steps.map(x => x.id === s.id ? { ...x, text } : x));
-              else draw();
+            const box = el("textarea", { class: "goal-step-edit", rows: 1, maxlength: 300, value: s.text, "aria-label": "Edit step" });
+            const fit = () => { box.style.height = "auto"; box.style.height = box.scrollHeight + 2 + "px"; };
+            const save = () => {
+              const text = box.value.trim().replace(/\s*\n\s*/g, " ");
+              if (text && text !== s.text) setSteps(g.steps.map(x => x.id === s.id ? { ...x, text } : x)); else draw();
             };
-            input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); finish(true); } else if (e.key === "Escape") finish(false); });
-            input.addEventListener("blur", () => finish(true));
-            span.replaceWith(input); input.focus(); input.setSelectionRange(input.value.length, input.value.length);
+            box.addEventListener("input", fit);
+            box.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); save(); } else if (e.key === "Escape") draw(); });
+            span.closest(".goal-step").replaceWith(el("div", { class: "goal-step-editor" }, box,
+              el("div", { class: "tools", style: "justify-content:flex-end" },
+                el("button", { class: "btn small", onclick: draw }, "Cancel"),
+                el("button", { class: "btn small primary", onclick: save }, "Save"))));
+            fit(); box.focus(); box.setSelectionRange(box.value.length, box.value.length);
           };
           span.addEventListener("click", edit);
           span.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); edit(); } });
