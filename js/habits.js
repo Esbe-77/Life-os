@@ -177,7 +177,8 @@ function bump(id, iso, by) {
 function tap(id, iso, by) {
   const h = getHabit(id); if (!h) return null;
   const before = countOn(h, iso), n = bump(id, iso, by);
-  if (iso === today() && before < h.target && n >= h.target) ding();
+  // Dings when the day completes, and on every go of a habit done several times a day.
+  if (iso === today() && before < h.target && n > before) ding();
   return n;
 }
 

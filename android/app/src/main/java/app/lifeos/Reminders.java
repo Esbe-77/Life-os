@@ -207,8 +207,8 @@ final class Reminders {
         return q;
     }
 
-    /** After a Done tap: if it completed the habit for the day, chime with a short note. */
-    static void chimeIfFinished(Context c, String habit, String date) {
+    /** After a Done tap: chime with a short note (how many to go, or complete). */
+    static void chimeDone(Context c, String habit, String date) {
         int target = 1, count = 0;
         String name = "";
         boolean found = false;
@@ -227,9 +227,17 @@ final class Reminders {
             }
         } catch (Exception ignored) {
         }
-        if (!found || count + queued(c, habit, date) != target) return;
-        chime(c, name.isEmpty() ? "Complete" : name + ": complete",
-                target > 1 ? "That's " + target + " of " + target + " today. Nice." : "Done for today. Nice.");
+        if (!found) return;
+        int now = count + queued(c, habit, date);
+        if (now == target) {
+            chime(c, name.isEmpty() ? "Complete" : name + ": complete",
+                    target > 1 ? "That's " + target + " of " + target + " today. Nice." : "Done for today. Nice.");
+        } else if (now < target) {
+            // Habits done several times a day chime on every go, not only the last.
+            int left = target - now;
+            chime(c, (name.isEmpty() ? "Done" : name) + ": " + now + " of " + target,
+                    left == 1 ? "One more to go today." : left + " more to go today.");
+        }
     }
 
     /** A short note that clears itself; posting it makes the phone's notification sound. */

@@ -7,7 +7,7 @@ import android.content.Intent;
 
 /**
  * The Done button on a habit reminder, or Complete on the Sunday review reminder:
- * note it for the page, clear the notification, and chime once it's complete.
+ * note it for the page, clear the notification, and chime (each go, and "complete" on the last).
  */
 public class DoneReceiver extends BroadcastReceiver {
     @Override
@@ -20,7 +20,7 @@ public class DoneReceiver extends BroadcastReceiver {
             Reminders.queueReview(context, date);
         } else if (habit != null) {
             Reminders.queueDone(context, habit, date);
-            Reminders.chimeIfFinished(context, habit, date);
+            Reminders.chimeDone(context, habit, date);
         }
     }
 }
