@@ -19,8 +19,16 @@ import android.webkit.WebViewClient;
 
 import androidx.webkit.WebViewAssetLoader;
 
+import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Life OS runs as a web app inside this one WebView. The files ship inside
@@ -33,6 +41,9 @@ public class MainActivity extends Activity {
     private static final String START_URL = "https://" + HOST + "/assets/www/index.html";
     private static final int REQ_OPEN_FILE = 1;
     private static final int REQ_SAVE_FILE = 2;
+    // The only sites the page may fetch from: public market prices and headlines (Stocks tab).
+    private static final List<String> NET_HOSTS = Arrays.asList(
+            "query1.finance.yahoo.com", "query2.finance.yahoo.com", "news.google.com");
 
     private WebView web;
     private WebViewAssetLoader assets;
@@ -198,6 +209,43 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void cancelTimer(String id) {
             Reminders.cancelTimer(getApplicationContext(), id);
+        }
+
+        /**
+         * Fetches a public page for the Stocks tab, off the main thread, and hands
+         * it back through window.__lifeosHttp(id, status, text). Only NET_HOSTS.
+         */
+        @JavascriptInterface
+        public void httpGet(String id, String url) {
+            new Thread(() -> {
+                int status = 0;
+                String body = "";
+                HttpURLConnection conn = null;
+                try {
+                    URL u = new URL(url);
+                    if (!"https".equals(u.getProtocol()) || !NET_HOSTS.contains(u.getHost())) throw new SecurityException();
+                    conn = (HttpURLConnection) u.openConnection();
+                    conn.setConnectTimeout(10000);
+                    conn.setReadTimeout(15000);
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) LifeOS");
+                    status = conn.getResponseCode();
+                    InputStream in = status < 400 ? conn.getInputStream() : conn.getErrorStream();
+                    if (in != null) {
+                        ByteArrayOutputStream out = new ByteArrayOutputStream();
+                        byte[] buf = new byte[16384];
+                        int n;
+                        while ((n = in.read(buf)) > 0 && out.size() < 4_000_000) out.write(buf, 0, n);
+                        in.close();
+                        body = out.toString("UTF-8");
+                    }
+                } catch (Exception e) {
+                    status = 0;
+                } finally {
+                    if (conn != null) conn.disconnect();
+                }
+                String js = "window.__lifeosHttp && window.__lifeosHttp(" + JSONObject.quote(id) + "," + status + "," + JSONObject.quote(body) + ")";
+                runOnUiThread(() -> web.evaluateJavascript(js, null));
+            }).start();
         }
 
         /** Asks for permission to show notifications (Android 13+), once. */
