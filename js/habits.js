@@ -242,9 +242,10 @@ const timeOf = at => at.slice(11, 16);
 // ---------- the section on Home ----------
 let justLogged = null; // { habitId, entryId, until } so a mistaken tap can be undone
 let reordering = false; // Home shows drag handles instead of ticks while true
-// Whether Home shows the habits not planned for today (remembered on this phone).
+// Whether Home shows tomorrow's habits, and the rest not planned for today (remembered on this phone).
+let showTomorrow = !!store.getMeta().showTomorrowHabits;
 let showLater = !!store.getMeta().showLaterHabits;
-const rememberFold = () => store.setMeta({ showLaterHabits: showLater });
+const rememberFold = () => store.setMeta({ showTomorrowHabits: showTomorrow, showLaterHabits: showLater });
 
 export function habitsSection(rerender) {
   settleTimers();
@@ -305,14 +306,21 @@ export function habitsSection(rerender) {
       return next + (next === t ? first : "");
     };
     const sorted = dos.map((h, i) => [key(h), i, h]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1])).map(x => x[2]);
-    // Habits not planned for today fold into one row, to keep Home tidy.
-    const onToday = sorted.filter(h => isOn(h, t)), later = sorted.filter(h => !isOn(h, t));
-    const fold = later.length ? el("button", { class: "row hb-fold", "aria-expanded": String(showLater), onclick: () => { showLater = !showLater; rememberFold(); draw(); } },
-      el("span", { class: "main" }, el("span", { class: "title", text: `Not today (${later.length})` }),
-        el("span", { class: "meta", text: showLater ? "Tap to hide" : later.map(h => h.name).join(", ") })),
-      el("span", { class: "hb-chev", "aria-hidden": "true", text: "⌄" })) : null;
+    // Habits not planned for today fold away to keep Home tidy: tomorrow's in
+    // one row, the rest in another.
+    const tmw = addDays(t, 1);
+    const onToday = sorted.filter(h => isOn(h, t)), notToday = sorted.filter(h => !isOn(h, t));
+    const tomorrow = notToday.filter(h => isOn(h, tmw)), later = notToday.filter(h => !isOn(h, tmw));
+    const fold = (label, list, open, toggle) => list.length ? [
+      el("button", { class: "row hb-fold", "aria-expanded": String(open), onclick: () => { toggle(); rememberFold(); draw(); } },
+        el("span", { class: "main" }, el("span", { class: "title", text: `${label} (${list.length})` }),
+          el("span", { class: "meta", text: open ? "Tap to hide" : list.map(h => h.name).join(", ") })),
+        el("span", { class: "hb-chev", "aria-hidden": "true", text: "⌄" })),
+      ...(open ? list.map(h => habitRow(h, false)) : [])] : null;
     if (dos.length) sec.append(holdToReorder(el("div", { class: "rows" },
-      onToday.map(h => habitRow(h, true)), fold, showLater ? later.map(h => habitRow(h, false)) : null)));
+      onToday.map(h => habitRow(h, true)),
+      fold("Tomorrow", tomorrow, showTomorrow, () => { showTomorrow = !showTomorrow; }),
+      fold(tomorrow.length ? "Later" : "Not today", later, showLater, () => { showLater = !showLater; }))));
     if (breaks.length) {
       sec.append(el("span", { class: "mono muted", style: "margin-top:4px", text: "DOING LESS OF" }));
       sec.append(holdToReorder(el("div", { class: "rows" }, breaks.map(breakRow))));
@@ -388,6 +396,7 @@ export function habitsSection(rerender) {
     const todayPart = multi && (onToday || n) ? `${n} of ${h.target} today · ` : "";
     const meta = unplanned ? `${todayPart}Not planned this week${done ? ` · ${done} done` : ""}`
       : onToday ? `${todayPart}${done} of ${planned} ${multi ? "days " : ""}this week${!multi && h.reminders.length ? " · " + h.reminders.map(r => r.time).sort().join(", ") : ""}`
+      : nextOn(h) === "tomorrow" ? `Tomorrow · ${done} of ${planned} this week`
       : `Not today · ${done} of ${planned} this week${nextOn(h) ? " · next " + nextOn(h) : ""}`;
 
     let timerEl = null;
