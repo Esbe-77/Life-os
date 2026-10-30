@@ -8,8 +8,9 @@ import people from "./people.js";
 import energy from "./energy.js";
 import mind from "./mind.js";
 import goals from "./goals.js";
+import stocks from "./stocks.js";
 
 // Energy is no longer a tab, but stays here so its old check-ins are kept in
 // backups and can still be restored.
-export const MODULES = [home, goals, mind, people, decisions, weeklyReview, energy];
+export const MODULES = [home, goals, mind, people, decisions, stocks, weeklyReview, energy];
 export const TABS = MODULES.filter(m => m !== energy);
