@@ -7,14 +7,16 @@ import android.content.Intent;
 
 /**
  * The Done button on a habit reminder, or Complete on the Sunday review reminder:
- * note it for the page, clear the notification, and chime (each go, and "complete" on the last).
+ * note it for the page and update the notifications (see Reminders.chimeDone).
  */
 public class DoneReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         String habit = intent.getStringExtra("habit"), date = intent.getStringExtra("date");
         NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        nm.cancel(intent.getIntExtra("notif", 0));
+        // The review reminder (and habit reminders from older versions) name their own notification.
+        int notif = intent.getIntExtra("notif", 0);
+        if (notif != 0) nm.cancel(notif);
         if (date == null) return;
         if (intent.getBooleanExtra("review", false)) {
             Reminders.queueReview(context, date);
