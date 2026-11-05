@@ -22,7 +22,9 @@ public class DoneReceiver extends BroadcastReceiver {
             Reminders.queueReview(context, date);
         } else if (habit != null) {
             Reminders.queueDone(context, habit, date);
-            Reminders.chimeDone(context, habit, date);
+            // Kept alive briefly so the sound can finish playing.
+            PendingResult pending = goAsync();
+            Reminders.chimeDone(context, habit, date, pending::finish);
         }
     }
 }

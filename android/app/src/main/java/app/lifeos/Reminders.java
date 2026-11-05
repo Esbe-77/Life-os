@@ -30,9 +30,9 @@ import java.util.Set;
  * when a reminder fires while an earlier one is still undone they merge into
  * "N habits to do" with a Done button for each (up to three). Taps are queued
  * here until the page collects them (takeDone), and a reminder is skipped once
- * the queued taps finish the day. A Done that leaves the habit unfinished
- * updates the notification with a sound; the tap that completes it posts a
- * short "complete" notification instead.
+ * the queued taps finish the day. A Done takes the habit off the notification:
+ * with goes left it just plays the notification sound, and the tap that
+ * completes it posts a short "complete" notification.
  */
 final class Reminders {
     private static final String PREFS = "lifeos_reminders";
@@ -206,20 +206,48 @@ final class Reminders {
     }
 
     /**
-     * After a Done tap: when it finishes the habit for the day, chime with a short
-     * "complete" note. Otherwise the habit notification is updated with a sound.
+     * After a Done tap: the habit comes off the habit notification either way (a
+     * later reminder brings it back if there are goes left). When it finishes the
+     * habit for the day, chime with a short "complete" note; otherwise just play
+     * the sound. done: called once the sound has had time to play.
      */
-    static void chimeDone(Context c, String habit, String date) {
+    static void chimeDone(Context c, String habit, String date, Runnable done) {
+        removeShown(c, habit);
+        showHabits(c, false);
         JSONObject o = latest(c, habit, date);
-        if (o == null) { showHabits(c, false); return; }
-        int target = o.optInt("target", 1);
-        boolean finished = o.optInt("count") + queued(c, habit, date) >= target;
-        if (finished) {
+        int target = o == null ? 1 : o.optInt("target", 1);
+        boolean finished = o == null || o.optInt("count") + queued(c, habit, date) >= target;
+        if (o != null && finished) {
             String name = o.optString("title", "");
             chime(c, name.isEmpty() ? "Complete" : name + ": complete",
                     target > 1 ? "That's " + target + " of " + target + " today. Nice." : "Done for today. Nice.");
         }
-        showHabits(c, !finished);
+        if (finished) { done.run(); return; }
+        // A go done, more to come: the notification sound, with nothing left on screen.
+        try {
+            android.media.Ringtone r = android.media.RingtoneManager.getRingtone(c,
+                    android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION));
+            if (r == null) { done.run(); return; }
+            r.setAudioAttributes(new android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
+            r.play();
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> { r.stop(); done.run(); }, 3000);
+        } catch (Exception e) {
+            done.run();
+        }
+    }
+
+    private static synchronized void removeShown(Context c, String habit) {
+        try {
+            JSONArray shown = new JSONArray(prefs(c).getString(KEY_SHOWN, "[]")), out = new JSONArray();
+            for (int i = 0; i < shown.length(); i++) {
+                JSONObject e = shown.getJSONObject(i);
+                if (!habit.equals(e.optString("habit"))) out.put(e);
+            }
+            prefs(c).edit().putString(KEY_SHOWN, out.toString()).apply();
+        } catch (Exception ignored) {
+        }
     }
 
     // ---------- the shared habit notification ----------
