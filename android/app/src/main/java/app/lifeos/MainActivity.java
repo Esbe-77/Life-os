@@ -248,6 +248,31 @@ public class MainActivity extends Activity {
             }).start();
         }
 
+        /** How reminders stand on this phone, for Settings (see Reminders.status). */
+        @JavascriptInterface
+        public String reminderStatus() {
+            return Reminders.status(getApplicationContext());
+        }
+
+        @JavascriptInterface
+        public void testReminder() {
+            Reminders.test(getApplicationContext());
+        }
+
+        /** Opens the phone's notification settings for this app. */
+        @JavascriptInterface
+        public void openNotificationSettings() {
+            runOnUiThread(() -> {
+                Intent i = Build.VERSION.SDK_INT >= 26
+                        ? new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getPackageName())
+                        : new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()));
+                try {
+                    startActivity(i);
+                } catch (ActivityNotFoundException ignored) {
+                }
+            });
+        }
+
         /** Asks for permission to show notifications (Android 13+), once. */
         @JavascriptInterface
         public void requestNotifications() {

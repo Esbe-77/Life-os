@@ -52,3 +52,11 @@ export function startTimer(id, seconds, title, text) {
   try { bridge().startTimer(id, seconds, title, text); } catch {}
 }
 export function cancelTimer(id) { try { bridge()?.cancelTimer?.(id); } catch {} }
+
+// For Settings: whether the phone lets reminders through, and the next few booked.
+// { allowed, exact, count, next: [{ title, at (ms) }] }, or null outside the app.
+export function status() {
+  try { return JSON.parse(bridge()?.reminderStatus?.() || "null"); } catch { return null; }
+}
+export function test() { askPermission(); try { bridge()?.testReminder?.(); } catch {} }
+export function openSettings() { try { bridge()?.openNotificationSettings?.(); } catch {} }

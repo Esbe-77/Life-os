@@ -73,6 +73,55 @@ final class Reminders {
         p.edit().putStringSet(KEY_BOOKED, booked).apply();
     }
 
+    /**
+     * For Settings: whether the phone lets the app notify and set exact alarms,
+     * and the next few reminders booked, soonest first. As JSON.
+     */
+    static String status(Context c) {
+        JSONObject out = new JSONObject();
+        try {
+            NotificationManager nm = notifications(c);
+            boolean allowed = nm.areNotificationsEnabled();
+            if (Build.VERSION.SDK_INT >= 26) {
+                NotificationChannel ch = nm.getNotificationChannel(CHANNEL);
+                if (ch != null && ch.getImportance() == NotificationManager.IMPORTANCE_NONE) allowed = false;
+            }
+            AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
+            out.put("allowed", allowed);
+            out.put("exact", Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms());
+            java.util.List<JSONObject> next = new java.util.ArrayList<>();
+            JSONArray list = new JSONArray(prefs(c).getString(KEY_LIST, "[]"));
+            for (int i = 0; i < list.length(); i++) {
+                JSONObject o = list.getJSONObject(i);
+                long when = nextTime(o);
+                if (when > 0) next.add(new JSONObject().put("title", o.optString("title")).put("at", when));
+            }
+            next.sort((a, b) -> Long.compare(a.optLong("at"), b.optLong("at")));
+            JSONArray soon = new JSONArray();
+            for (int i = 0; i < Math.min(5, next.size()); i++) soon.put(next.get(i));
+            out.put("count", next.size());
+            out.put("next", soon);
+        } catch (Exception ignored) {
+        }
+        return out.toString();
+    }
+
+    /** For Settings: a notification now, to check that reminders get through. */
+    static void test(Context c) {
+        NotificationManager nm = notifications(c);
+        Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(c, CHANNEL) : new Notification.Builder(c);
+        b.setSmallIcon(R.drawable.ic_stat)
+                .setColor(0xFF2C5A4C)
+                .setContentTitle("Life OS")
+                .setContentText("Reminders are getting through.")
+                .setAutoCancel(true);
+        if (Build.VERSION.SDK_INT >= 26) b.setTimeoutAfter(60000);
+        try {
+            nm.notify("test".hashCode(), b.build());
+        } catch (SecurityException ignored) {
+        }
+    }
+
     static void startTimer(Context c, String id, int seconds, String title, String text) {
         try {
             JSONObject o = new JSONObject();

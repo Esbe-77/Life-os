@@ -151,7 +151,27 @@ function mountSettings(root) {
       } }, rr.on ? "Turn off" : "Remind me") : null),
     el("p", { class: "small muted", text: "From this time on Sunday, Home asks you to plan next week's habits." + (reminders.canNotify() ? " Decisions remind you on their check-in day, at 9am. Habit reminders are set on each habit." : "") }));
 
+  // How the phone's reminders stand, to check they're getting through.
+  const st = reminders.status();
+  const when = at => {
+    const d = new Date(at), days = Math.round((new Date(d).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 864e5);
+    const day = days === 0 ? "Today" : days === 1 ? "Tomorrow" : d.toLocaleDateString("en-AU", { weekday: "long" });
+    return `${day} ${d.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" }).replace(/\s?([ap])m/i, (_, x) => x.toLowerCase() + "m")}`;
+  };
+  const phoneCard = st && el("section", { class: "card" },
+    el("h2", { style: "font-size:20px;font-weight:500", text: "Phone reminders" }),
+    !st.allowed ? el("div", { class: "notice" },
+      el("span", { text: "Your phone is blocking this app's notifications, so no reminders show." }),
+      el("button", { class: "btn small", onclick: () => reminders.openSettings() }, "Allow")) : null,
+    st.allowed && !st.exact ? el("p", { class: "small muted", text: "Your phone may hold reminders back a little to save battery." }) : null,
+    st.next?.length
+      ? el("div", { class: "rows" }, st.next.map(n => el("div", { class: "row" },
+          el("div", { class: "main" }, el("span", { class: "title", text: n.title }), el("span", { class: "meta", text: when(n.at) })))))
+      : el("p", { class: "small muted", text: "No reminders coming up. Habit reminders are set on each habit, on the days it's planned." }),
+    el("div", { class: "tools" }, el("button", { class: "btn small", onclick: () => reminders.test() }, "Send a test")));
+
   root.append(
+    ...(phoneCard ? [phoneCard] : []),
     reminderCard,
     el("section", { class: "card" },
       el("h2", { style: "font-size:20px;font-weight:500", text: "Backup" }),
