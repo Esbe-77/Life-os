@@ -268,7 +268,7 @@ export function habitsSection(rerender, fold = { open: true, toggle: null }) {
         habits.length > 1 && !adding ? el("button", { class: "linkbtn", onclick: () => { reordering = true; rerender(); } }, "Reorder") : null,
         el("button", { class: "linkbtn", onclick: () => { adding = !adding; draw(); if (adding) sec.querySelector("#habit-new")?.focus(); } }, adding ? "Done" : "Add")) : null;
       sec.append(fold.toggle
-        ? foldHead("Habits", { open: fold.open, onToggle: fold.toggle, tools, summary: left ? `${left} to do today` : "" })
+        ? foldHead("Habits", { open: fold.open, onToggle: fold.toggle, tools, summary: left ? `${left} to do today` : "", dot: left > 0 })
         : el("div", { class: "rowhead" }, el("h2", { text: "Habits" }), tools));
       if (!fold.open) return;
     }

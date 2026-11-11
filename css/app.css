@@ -375,3 +375,4 @@ a.main { color: inherit; text-decoration: none; }
 .hm-task-tick.on { background: var(--m-mind); }
 .hm-task-add { gap: 10px; align-items: center; }
 .hm-task-add input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; color: inherit; padding: 4px 0; outline: none; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--m-habits); flex: none; }

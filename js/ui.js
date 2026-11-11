@@ -130,9 +130,10 @@ export function ding() {
 
 // A section heading that folds the section away. Tapping the title calls
 // onToggle(); when closed, `summary` shows on the right instead of `tools`.
-export function foldHead(title, { open, onToggle, summary = "", tools = null }) {
+// `dot` adds a small green dot after the title (e.g. habits still to do).
+export function foldHead(title, { open, onToggle, summary = "", tools = null, dot = false }) {
   return el("div", { class: "rowhead fold-head" },
     el("button", { class: "fold-title", "aria-expanded": String(open), onclick: onToggle },
-      el("h2", { text: title }), el("span", { class: "hb-chev", "aria-hidden": "true", text: "⌄" })),
+      el("h2", { text: title }), dot ? el("span", { class: "live-dot", "aria-label": "Still to do today" }) : null, el("span", { class: "hb-chev", "aria-hidden": "true", text: "⌄" })),
     open ? tools : summary ? el("span", { class: "mono muted", text: summary }) : null);
 }
