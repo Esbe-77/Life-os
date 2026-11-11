@@ -60,17 +60,18 @@ function tickNext(id, stepId) {
 }
 
 // A goal as a row: title, progress, and the next step with a tick.
-function goalRow(g, onChange) {
-  const step = nextStep(g), p = progress(g);
+// On Home ({ next: false }) the row leaves out the next step and its tick.
+function goalRow(g, onChange, { next = true } = {}) {
+  const step = next ? nextStep(g) : null, p = progress(g);
   const due = dueText(g);
   const late = g.due && g.due < today();
   return el("div", { class: "row goal-row" },
-    step
+    !next ? null : step
       ? el("button", { class: "goal-tick", "aria-label": `Tick off: ${step.text}`, onclick: () => { tickNext(g.id, step.id); onChange(); } })
       : el("span", { class: "goal-tick none", "aria-hidden": "true" }),
     el("a", { class: "main", href: `#/${ID}/${g.id}` },
       el("span", { class: "title", text: g.title }),
-      el("span", { class: "meta goal-next", text: step ? `Next: ${step.text}` : g.steps.length ? "All steps done. Tap to mark it achieved." : "Tap to add the first small step." }),
+      next ? el("span", { class: "meta goal-next", text: step ? `Next: ${step.text}` : g.steps.length ? "All steps done. Tap to mark it achieved." : "Tap to add the first small step." }) : null,
       el("span", { class: "goal-bar", "aria-hidden": "true" }, el("i", { style: `width:${p * 100}%` })),
       el("span", { class: "meta mono", style: late ? "color:var(--q-drop)" : "", text: [stepsText(g), due.replace(/^by [^·]*· /, "")].filter(Boolean).join(" · ") })));
 }
