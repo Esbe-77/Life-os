@@ -127,3 +127,12 @@ export function ding() {
     });
   } catch {}
 }
+
+// A section heading that folds the section away. Tapping the title calls
+// onToggle(); when closed, `summary` shows on the right instead of `tools`.
+export function foldHead(title, { open, onToggle, summary = "", tools = null }) {
+  return el("div", { class: "rowhead fold-head" },
+    el("button", { class: "fold-title", "aria-expanded": String(open), onclick: onToggle },
+      el("h2", { text: title }), el("span", { class: "hb-chev", "aria-hidden": "true", text: "⌄" })),
+    open ? tools : summary ? el("span", { class: "mono muted", text: summary }) : null);
+}

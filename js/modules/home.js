@@ -1,12 +1,13 @@
-// Home: the one calm page. Habits for today, goals' next steps, this week's priorities,
+// Home: the one calm page. Habits for today, tasks, goals, this week's priorities,
 // the weekly review, who to reach out to, and decisions waiting on you.
+// Each section folds away by tapping its heading (remembered in meta "homeClosed").
 // It owns the habits list; everything else it reads from the other modules.
 //
 // Habit data and the habit settings page live in js/habits.js.
 
 import * as store from "../store.js";
 import * as backup from "../backup.js";
-import { el, addDays, parseDate, formatDate } from "../ui.js";
+import { el, addDays, parseDate, formatDate, foldHead } from "../ui.js";
 import { loadHabits, saveHabits, mergeHabits, habitsSection, renderHabitPage, renderPlanPage, renderWeekPage, planTitle, tickTimers, getHabit } from "../habits.js";
 import review from "./weekly-review.js";
 import decisions from "./decisions.js";
@@ -47,6 +48,10 @@ export default {
 
   mount(root, { view, navigate, refreshChrome }) {
     let editing = false;
+    let closed = { ...store.getMeta().homeClosed };
+    const isOpen = key => !closed[key];
+    const toggle = key => () => { closed = { ...closed, [key]: !closed[key] }; store.setMeta({ homeClosed: closed }); render(); };
+    const head = (key, title, summary, tools) => foldHead(title, { open: isOpen(key), onToggle: toggle(key), summary, tools });
 
     function render() {
       const y = window.scrollY;
@@ -54,7 +59,7 @@ export default {
       if (view === "plan") { renderPlanPage(root, navigate); return; }
       if (view === "week") { renderWeekPage(root, navigate); return; }
       if (view.startsWith("habit/")) { renderHabitPage(root, view.slice(6), navigate); return; }
-      const sections = [sundayNudge(), habitsSection(render), goalsSection(), mindSection(), prioritiesSection(), peopleSection(), decisionsSection(), backupNudge()];
+      const sections = [sundayNudge(), habitsSection(render, { open: isOpen("habits"), toggle: toggle("habits") }), tasksSection(), goalsSection(), prioritiesSection(), peopleSection(), decisionsSection(), backupNudge()];
       sections.forEach(s => s && root.append(s));
       window.scrollTo(0, y);
     }
@@ -76,11 +81,10 @@ export default {
       const r = review.latest();
       if (!r || !(r.answers?.matters?.trim() || r.answers?.drop?.trim())) return null;
       const stale = parseDate(r.week) < parseDate(addDays(review.thisSunday(), -7));
+      const from = el("span", { class: "mono muted", text: stale ? `from week of ${review.weekLabel(r.week)}` : "from Sunday's review" });
       return el("section", { class: "section" },
-        el("div", { class: "rowhead" },
-          el("h2", { text: "This week's priorities" }),
-          el("span", { class: "mono muted", text: stale ? `from week of ${review.weekLabel(r.week)}` : "from Sunday's review" })),
-        el("div", { class: "card", style: "gap:12px" },
+        head("priorities", "This week's priorities", "", from),
+        isOpen("priorities") && el("div", { class: "card", style: "gap:12px" },
           r.answers.matters?.trim() ? el("div", { class: "wr-ans", style: "--qc:var(--q-matters)" },
             el("div", {}, el("div", { class: "k", text: "What matters" }), el("div", { class: "v", text: r.answers.matters.trim() }))) : null,
           r.answers.drop?.trim() ? el("div", { class: "wr-ans", style: "--qc:var(--q-drop)" },
@@ -104,8 +108,8 @@ export default {
           right));
       });
       return el("section", { class: "section" },
-        el("div", { class: "rowhead" }, el("h2", { text: "Reach out to" }), el("a", { class: "linkbtn", href: "#/people" }, "All people")),
-        rows);
+        head("people", "Reach out to", `${due.length} due`, el("a", { class: "linkbtn", href: "#/people" }, "All people")),
+        isOpen("people") && rows);
     }
 
     // ----- decisions due -----
@@ -113,34 +117,43 @@ export default {
       const due = decisions.due();
       if (!due.length) return null;
       return el("section", { class: "section" },
-        el("h2", { text: "Decisions to look back on" }),
-        el("div", { class: "rows" }, due.slice(0, 3).map(d => el("a", { class: "row", href: `#/decisions/${d.id}` },
+        head("decisions", "Decisions to look back on", `${due.length} due`),
+        isOpen("decisions") && el("div", { class: "rows" }, due.slice(0, 3).map(d => el("a", { class: "row", href: `#/decisions/${d.id}` },
           el("div", { class: "main" }, el("span", { class: "title", text: d.title }), el("span", { class: "meta", text: `Decided ${formatDate(d.decidedOn)}` })),
           el("span", { class: "pill", style: "--pc:var(--m-decisions)", text: "Look back" })))));
     }
 
-    // ----- on my mind -----
-    // ----- goals: each active goal's next step, ready to tick -----
+    // ----- goals: progress on each active goal -----
     function goalsSection() {
       const list = goals.activeGoals();
       if (!list.length) return null;
       return el("section", { class: "section" },
-        el("div", { class: "rowhead" },
-          el("h2", { text: "Goals" }),
-          el("a", { class: "linkbtn", href: "#/goals" }, list.length > 3 ? `All ${list.length}` : "Open")),
-        el("div", { class: "rows" }, list.slice(0, 3).map(g => goals.goalRow(g, render))));
+        head("goals", "Goals", `${list.length} active`, el("a", { class: "linkbtn", href: "#/goals" }, list.length > 3 ? `All ${list.length}` : "Open")),
+        isOpen("goals") && el("div", { class: "rows" }, list.slice(0, 3).map(g => goals.goalRow(g, render, { next: false }))));
     }
 
-    function mindSection() {
+    // ----- tasks: the open ones, ready to tick, and a line to add one -----
+    function tasksSection() {
       const items = mind.openItems();
-      const big = items.filter(i => i.weight === 3).length;
-      return el("a", { class: "card", href: "#/mind", style: "text-decoration:none;color:inherit;flex-direction:row;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px" },
-        el("div", { style: "display:flex;flex-direction:column;gap:2px;min-width:0" },
-          el("span", { style: "font-family:var(--font-display);font-size:17px", text: "On your mind" }),
-          el("span", { class: "small muted", text: items.length
-            ? `${items.length} thing${items.length === 1 ? "" : "s"}${big ? `, ${big} big` : ""}. Top: ${items[0].text.split("\n")[0].slice(0, 70)}`
-            : "Something going round your head? Dump it here." })),
-        el("span", { class: "btn small", style: "flex:none", text: "Dump" }));
+      const input = el("input", { type: "text", class: "hm-task-new", placeholder: "Add a task", maxlength: 300, "aria-label": "Add a task", enterkeyhint: "done" });
+      const add = () => {
+        const text = input.value.trim();
+        if (!text) { input.focus(); return; }
+        mind.add(text); // saving redraws Home
+        setTimeout(() => root.querySelector(".hm-task-new")?.focus(), 0);
+      };
+      input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
+      const shown = items.slice(0, 5);
+      return el("section", { class: "section" },
+        head("tasks", "Tasks", items.length ? `${items.length} to do` : "", el("a", { class: "linkbtn", href: "#/mind" }, items.length > shown.length ? `All ${items.length}` : "Open")),
+        isOpen("tasks") && el("div", { class: "rows" },
+          shown.map(i => el("div", { class: "row goal-row" },
+            el("button", { class: "goal-tick hm-task-tick", "aria-label": `Done: ${i.text}`, onclick: e => {
+              e.currentTarget.classList.add("on"); e.currentTarget.textContent = "✓";
+              setTimeout(() => mind.complete(i.id), 250);
+            } }),
+            el("a", { class: "main", href: `#/mind/${i.id}` }, el("span", { class: "title", text: i.text.split("\n")[0] })))),
+          el("div", { class: "row hm-task-add" }, input, el("button", { class: "btn small", onclick: add }, "Add"))));
     }
 
     // ----- backup reminder -----

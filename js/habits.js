@@ -21,7 +21,7 @@
 
 import * as store from "./store.js";
 import * as reminders from "./reminders.js";
-import { el, isoDate, addDays, parseDate, timePick, WEEKDAYS, weekStart, MONTHS, sortable, moveItem, ding } from "./ui.js";
+import { el, isoDate, addDays, parseDate, timePick, WEEKDAYS, weekStart, MONTHS, sortable, moveItem, ding, foldHead } from "./ui.js";
 
 const KEY = "habits";
 const ALL = [0, 1, 2, 3, 4, 5, 6];
@@ -245,9 +245,11 @@ let reordering = false; // Home shows drag handles instead of ticks while true
 // Whether Home shows tomorrow's habits, and the rest not planned for today (remembered on this phone).
 let showTomorrow = !!store.getMeta().showTomorrowHabits;
 let showLater = !!store.getMeta().showLaterHabits;
-const rememberFold = () => store.setMeta({ showTomorrowHabits: showTomorrow, showLaterHabits: showLater });
+let showToday = !store.getMeta().hideTodayHabits;
+const rememberFold = () => store.setMeta({ showTomorrowHabits: showTomorrow, showLaterHabits: showLater, hideTodayHabits: !showToday });
 
-export function habitsSection(rerender) {
+// fold: { open, toggle } from Home, to fold the whole section away.
+export function habitsSection(rerender, fold = { open: true, toggle: null }) {
   settleTimers();
   const habits = loadHabits();
   const t = today();
@@ -256,14 +258,20 @@ export function habitsSection(rerender) {
 
   const draw = () => {
     sec.replaceChildren();
-    sec.append(el("div", { class: "rowhead" },
-      el("h2", { text: reordering ? "Drag to reorder" : "Habits" }),
-      reordering
-        ? el("button", { class: "linkbtn", onclick: () => { reordering = false; rerender(); } }, "Done")
-        : habits.length ? el("span", { class: "tools", style: "gap:16px" },
-            habits.some(h => h.kind === "do") && !adding ? el("a", { class: "linkbtn", href: "#/home/week" }, "Week") : null,
-            habits.length > 1 && !adding ? el("button", { class: "linkbtn", onclick: () => { reordering = true; rerender(); } }, "Reorder") : null,
-            el("button", { class: "linkbtn", onclick: () => { adding = !adding; draw(); if (adding) sec.querySelector("#habit-new")?.focus(); } }, adding ? "Done" : "Add")) : null));
+    if (reordering) sec.append(el("div", { class: "rowhead" },
+      el("h2", { text: "Drag to reorder" }),
+      el("button", { class: "linkbtn", onclick: () => { reordering = false; rerender(); } }, "Done")));
+    else {
+      const left = habits.filter(h => h.kind === "do" && isOn(h, t) && countOn(h, t) < h.target).length;
+      const tools = habits.length ? el("span", { class: "tools", style: "gap:16px" },
+        habits.some(h => h.kind === "do") && !adding ? el("a", { class: "linkbtn", href: "#/home/week" }, "Week") : null,
+        habits.length > 1 && !adding ? el("button", { class: "linkbtn", onclick: () => { reordering = true; rerender(); } }, "Reorder") : null,
+        el("button", { class: "linkbtn", onclick: () => { adding = !adding; draw(); if (adding) sec.querySelector("#habit-new")?.focus(); } }, adding ? "Done" : "Add")) : null;
+      sec.append(fold.toggle
+        ? foldHead("Habits", { open: fold.open, onToggle: fold.toggle, tools, summary: left ? `${left} to do today` : "" })
+        : el("div", { class: "rowhead" }, el("h2", { text: "Habits" }), tools));
+      if (!fold.open) return;
+    }
 
     if (!habits.length) {
       sec.append(el("div", { class: "card", style: "gap:10px" },
@@ -306,21 +314,21 @@ export function habitsSection(rerender) {
       return next + (next === t ? first : "");
     };
     const sorted = dos.map((h, i) => [key(h), i, h]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1])).map(x => x[2]);
-    // Habits not planned for today fold away to keep Home tidy: tomorrow's in
-    // one row, the rest in another.
+    // Today's habits sit under a "Today" row that folds them away (open unless
+    // you've closed it); tomorrow's and the rest are folded under their own rows.
     const tmw = addDays(t, 1);
     const onToday = sorted.filter(h => isOn(h, t)), notToday = sorted.filter(h => !isOn(h, t));
     const tomorrow = notToday.filter(h => isOn(h, tmw)), later = notToday.filter(h => !isOn(h, tmw));
-    const fold = (label, list, open, toggle) => list.length ? [
+    const foldRow = (label, list, open, toggle, isToday = false) => list.length ? [
       el("button", { class: "row hb-fold", "aria-expanded": String(open), onclick: () => { toggle(); rememberFold(); draw(); } },
         el("span", { class: "main" }, el("span", { class: "title", text: `${label} (${list.length})` }),
-          el("span", { class: "meta", text: open ? "Tap to hide" : list.map(h => h.name).join(", ") })),
+          el("span", { class: "meta", text: open ? (isToday ? `${list.filter(h => countOn(h, t) >= h.target).length} of ${list.length} done` : "Tap to hide") : list.map(h => h.name).join(", ") })),
         el("span", { class: "hb-chev", "aria-hidden": "true", text: "⌄" })),
-      ...(open ? list.map(h => habitRow(h, false)) : [])] : null;
+      ...(open ? list.map(h => habitRow(h, isToday)) : [])] : null;
     if (dos.length) sec.append(holdToReorder(el("div", { class: "rows" },
-      onToday.map(h => habitRow(h, true)),
-      fold("Tomorrow", tomorrow, showTomorrow, () => { showTomorrow = !showTomorrow; }),
-      fold(tomorrow.length ? "Later" : "Not today", later, showLater, () => { showLater = !showLater; }))));
+      foldRow("Today", onToday, showToday, () => { showToday = !showToday; }, true),
+      foldRow("Tomorrow", tomorrow, showTomorrow, () => { showTomorrow = !showTomorrow; }),
+      foldRow(tomorrow.length ? "Later" : "Not today", later, showLater, () => { showLater = !showLater; }))));
     if (breaks.length) {
       sec.append(el("span", { class: "mono muted", style: "margin-top:4px", text: "DOING LESS OF" }));
       sec.append(holdToReorder(el("div", { class: "rows" }, breaks.map(breakRow))));

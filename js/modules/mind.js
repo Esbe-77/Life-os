@@ -1,5 +1,6 @@
-// On my mind: a place to dump the things going round in your head, say how
-// big each one feels, and (when you're ready) write how you'll deal with it.
+// Tasks: jot down what needs doing, say how big each one is, add a note on
+// how you'll do it if you like, and tick it off. (It began as "On my mind",
+// so its id, route and store key are still "mind".)
 //
 // Data (store key "mind"):
 //   { items: [ { id, text, weight: 1–3 (small, medium, big), plan,
@@ -28,14 +29,23 @@ let lastWeight = 2; // the add form remembers the last size picked
 
 export default {
   id: ID,
-  name: "On my mind",
-  tab: "Mind",
-  icon: "mind",
+  name: "Tasks",
+  tab: "Tasks",
+  icon: "tasks",
   color: "var(--m-mind)",
 
   backTo(view) { return view ? ID : null; },
   hasData() { return loadItems().length > 0; },
   openItems() { return open(loadItems()); },
+  // For Home: add a task, or tick one off.
+  add(text) {
+    const items = loadItems();
+    items.push({ id: newId(), text, weight: lastWeight, plan: "", status: "open", createdAt: now(), updatedAt: now() });
+    return saveItems(items);
+  },
+  complete(id) {
+    return saveItems(loadItems().map(i => i.id === id ? { ...i, status: "done", doneAt: now(), updatedAt: now() } : i));
+  },
 
   exportData() { return { items: loadItems() }; },
   importData(data) {
@@ -50,7 +60,7 @@ export default {
       else kept++;
     }
     if (added && !saveItems(mine)) return { error: "Your phone refused to save. Free up some storage and try again." };
-    return { added, kept, noun: ["thing on your mind", "things on your mind"] };
+    return { added, kept, noun: ["task", "tasks"] };
   },
 
   mount(root, { view, navigate }) {
@@ -80,7 +90,7 @@ export default {
 
     // ----- the list -----
     function renderList() {
-      const input = el("textarea", { id: "mind-new", rows: 2, placeholder: "What's going round in your head?", maxlength: 300, "aria-label": "Something on your mind" });
+      const input = el("textarea", { id: "mind-new", rows: 2, placeholder: "What needs doing?", maxlength: 300, "aria-label": "New task" });
       const add = () => {
         const text = input.value.trim();
         if (!text) { input.focus(); return; }
@@ -91,31 +101,31 @@ export default {
       };
       input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); add(); } });
       let sizes;
-      const drawSizes = () => sizes.replaceChildren(sizeChips(lastWeight, n => { lastWeight = n; drawSizes(); }, "How big does it feel?"));
+      const drawSizes = () => sizes.replaceChildren(sizeChips(lastWeight, n => { lastWeight = n; drawSizes(); }, "How big is it?"));
       sizes = el("div", {});
       drawSizes();
 
       root.append(el("section", { class: "card", style: "--fc:var(--m-mind);gap:12px" },
         input,
-        el("div", { class: "actions" }, sizes, el("button", { class: "btn primary", onclick: add }, "Dump it"))));
+        el("div", { class: "actions" }, sizes, el("button", { class: "btn primary", onclick: add }, "Add"))));
 
       const list = open(items);
       if (!list.length) {
         root.append(el("p", { class: "small muted", text: items.length
-          ? "Nothing open. Your head should feel a little lighter."
-          : "Write down anything that keeps coming back: worries, jobs, decisions, conversations you're putting off. Getting it out of your head is the point. You can come back and decide what to do about each one later." }));
+          ? "Nothing to do. Nice."
+          : "Write down anything you need to get done, big or small. Tap one to add a note, and tick it off when it's done." }));
       } else {
         const planned = list.filter(i => i.plan.trim()).length;
         root.append(el("div", { class: "rowhead" },
-          el("h2", { style: "font-size:20px;font-weight:500", text: `${list.length} on your mind` }),
-          el("span", { class: "mono muted", text: planned ? `${planned} with a plan` : "tap one to plan it" })));
+          el("h2", { style: "font-size:20px;font-weight:500", text: `${list.length} to do` }),
+          el("span", { class: "mono muted", text: planned ? `${planned} with a note` : "tap one to add a note" })));
         root.append(el("div", { class: "rows" }, list.map(itemRow)));
       }
 
       const done = items.filter(i => i.status === "done").sort((a, b) => (b.doneAt || "").localeCompare(a.doneAt || ""));
       if (done.length) {
         root.append(el("button", { class: "linkbtn", style: "align-self:flex-start;color:var(--muted)", onclick: () => { showDone = !showDone; render(); } },
-          showDone ? "Hide dealt with" : `Dealt with (${done.length})`));
+          showDone ? "Hide done" : `Done (${done.length})`));
         if (showDone) root.append(el("div", { class: "rows" }, done.map(itemRow)));
       }
     }
@@ -126,17 +136,17 @@ export default {
       return el("a", { class: `row mind-row${isDone ? " done" : ""}`, href: `#/${ID}/${i.id}`, style: `--wc:${color}` },
         el("div", { class: "main" },
           el("span", { class: "title", text: i.text }),
-          el("span", { class: "meta", text: isDone
-            ? `Dealt with ${i.doneAt ? formatDate(isoDate(new Date(i.doneAt))) : ""}`
-            : i.plan.trim() ? "Plan: " + i.plan.trim().split("\n")[0] : "No plan yet" })),
+          (isDone || i.plan.trim()) ? el("span", { class: "meta", text: isDone
+            ? `Done ${i.doneAt ? formatDate(isoDate(new Date(i.doneAt))) : ""}`
+            : i.plan.trim().split("\n")[0] }) : null),
         isDone ? null : el("span", { class: "pill", style: `--pc:${color}`, text: label }));
     }
 
     // ----- one item -----
     function renderItem(i) {
-      const text = el("textarea", { id: "mind-text", rows: 3, maxlength: 300, value: i.text, "aria-label": "What's on your mind" });
+      const text = el("textarea", { id: "mind-text", rows: 3, maxlength: 300, value: i.text, "aria-label": "Task" });
       text.addEventListener("change", () => { if (text.value.trim()) patch(i.id, { text: text.value.trim() }); });
-      const plan = el("textarea", { id: "mind-plan", rows: 5, value: i.plan, placeholder: "The next small step, who could help, or what you'll let go of." });
+      const plan = el("textarea", { id: "mind-plan", rows: 5, value: i.plan, placeholder: "The first step, who could help, anything to remember." });
       const saved = el("span", { class: "savestate", "aria-live": "polite" });
       let t = null;
       plan.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => { patch(i.id, { plan: plan.value }); saved.textContent = "Saved"; }, 600); });
@@ -153,17 +163,17 @@ export default {
 
       root.append(
         el("section", { class: "card", style: "--fc:var(--m-mind)" },
-          el("label", { class: "field" }, el("span", { text: "On my mind" }), text),
-          el("div", { class: "field" }, el("span", { class: "field-label", text: "How big does it feel?" }),
-            sizeChips(i.weight, n => { patch(i.id, { weight: n }); render(); }, "How big does it feel?")),
+          el("label", { class: "field" }, el("span", { text: "Task" }), text),
+          el("div", { class: "field" }, el("span", { class: "field-label", text: "How big is it?" }),
+            sizeChips(i.weight, n => { patch(i.id, { weight: n }); render(); }, "How big is it?")),
           el("label", { class: "field" },
-            el("span", { text: "How I'll deal with it" }), plan),
+            el("span", { text: "Notes" }), plan),
           el("div", { class: "actions" },
             saved,
             isDone
-              ? el("button", { class: "btn", onclick: () => { patch(i.id, { status: "open", doneAt: null }); render(); } }, "Back on my mind")
-              : el("button", { class: "btn primary", onclick: () => { patch(i.id, { plan: plan.value, status: "done", doneAt: now() }); navigate(ID); } }, "Dealt with"))),
-        el("p", { class: "small muted", text: `Added ${formatDate(isoDate(new Date(i.createdAt)))}.` + (isDone ? "" : " Tap Dealt with once it's sorted, or once you've decided to let it go.") }),
+              ? el("button", { class: "btn", onclick: () => { patch(i.id, { status: "open", doneAt: null }); render(); } }, "Not done yet")
+              : el("button", { class: "btn primary", onclick: () => { patch(i.id, { plan: plan.value, status: "done", doneAt: now() }); navigate(ID); } }, "Done"))),
+        el("p", { class: "small muted", text: `Added ${formatDate(isoDate(new Date(i.createdAt)))}.` + (isDone ? "" : " Tap Done once it's done, or once you've decided to let it go.") }),
         del);
     }
 
