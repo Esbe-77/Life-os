@@ -2,7 +2,7 @@
 // refreshed in the background, so an update shows up on the next launch.
 // Bump VERSION when the file list changes.
 
-const VERSION = "life-os-v23";
+const VERSION = "life-os-v24";
 const APP_FILES = [
   "./",
   "index.html",
