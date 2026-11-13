@@ -164,6 +164,9 @@ function mountSettings(root) {
     !st.allowed ? el("div", { class: "notice" },
       el("span", { text: "Your phone is blocking this app's notifications, so no reminders show." }),
       el("button", { class: "btn small", onclick: () => reminders.openSettings() }, "Allow")) : null,
+    st.allowed && st.battery === false ? el("div", { class: "notice" },
+      el("span", { text: "Your phone may put this app to sleep to save battery, which can stop reminders. In the app's settings, set Battery to Unrestricted." }),
+      el("button", { class: "btn small", onclick: () => reminders.openAppSettings() }, "Open")) : null,
     st.allowed && !st.exact ? el("p", { class: "small muted", text: "Your phone may hold reminders back a little to save battery." }) : null,
     st.next?.length
       ? el("div", { class: "rows" }, st.next.map(n => el("div", { class: "row" },

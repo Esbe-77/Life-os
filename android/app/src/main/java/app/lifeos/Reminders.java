@@ -41,6 +41,7 @@ final class Reminders {
     private static final String KEY_DONE = "done_queue";
     private static final String KEY_SHOWN = "habits_shown"; // habits in the shared notification
     private static final int HABITS_NOTIF = "habits".hashCode();
+    private static final int MAX_BOOKED = 60; // alarms booked at once; see bookAll
     private static final String CHANNEL = "reminders";
     private static final String CHANNEL_DONE = "done";
 
@@ -59,13 +60,23 @@ final class Reminders {
         for (String id : p.getStringSet(KEY_BOOKED, new HashSet<>())) cancel(c, id);
         Set<String> booked = new HashSet<>();
         try {
+            // Android allows an app only so many booked alarms (500), so book just
+            // the soonest few. Each one that fires books the next lot (AlarmReceiver).
             JSONArray list = new JSONArray(p.getString(KEY_LIST, "[]"));
+            java.util.List<Object[]> due = new java.util.ArrayList<>();
             for (int i = 0; i < list.length(); i++) {
                 JSONObject o = list.getJSONObject(i);
                 long when = nextTime(o);
-                if (when > 0) {
-                    book(c, o.getString("id"), when, o.toString());
+                if (when > 0) due.add(new Object[]{when, o});
+            }
+            due.sort((x, y) -> Long.compare((Long) x[0], (Long) y[0]));
+            for (int i = 0; i < Math.min(MAX_BOOKED, due.size()); i++) {
+                JSONObject o = (JSONObject) due.get(i)[1];
+                try {
+                    book(c, o.getString("id"), (Long) due.get(i)[0], o.toString());
                     booked.add(o.getString("id"));
+                } catch (Exception ignored) {
+                    // One that can't be booked doesn't stop the rest.
                 }
             }
         } catch (Exception ignored) {
@@ -89,6 +100,9 @@ final class Reminders {
             AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
             out.put("allowed", allowed);
             out.put("exact", Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms());
+            // false when the phone may put the app to sleep to save battery.
+            android.os.PowerManager pm = (android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE);
+            out.put("battery", Build.VERSION.SDK_INT < 23 || pm == null || pm.isIgnoringBatteryOptimizations(c.getPackageName()));
             java.util.List<JSONObject> next = new java.util.ArrayList<>();
             JSONArray list = new JSONArray(prefs(c).getString(KEY_LIST, "[]"));
             for (int i = 0; i < list.length(); i++) {

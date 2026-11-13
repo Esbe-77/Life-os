@@ -273,6 +273,17 @@ public class MainActivity extends Activity {
             });
         }
 
+        /** Opens this app's page in the phone's settings, where its battery use is set. */
+        @JavascriptInterface
+        public void openAppSettings() {
+            runOnUiThread(() -> {
+                try {
+                    startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
+                } catch (ActivityNotFoundException ignored) {
+                }
+            });
+        }
+
         /** Asks for permission to show notifications (Android 13+), once. */
         @JavascriptInterface
         public void requestNotifications() {
