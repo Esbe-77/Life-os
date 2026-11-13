@@ -7,10 +7,9 @@ A calm personal app for your phone, built from a few small parts:
 - **Decision journal**: write down what you decided, why, and what you expect. When the check-in date comes, it asks how it turned out.
 - **People**: the 15–20 people who matter most, and a gentle nudge when it's been a while.
 - **Goals**: a few things you want to make happen. Each has why it matters, what done looks like, an optional date, small steps (the next one shows on Home) and the habits that help.
-- **Stocks**: the ASX 200, S&P 500 and Nasdaq 100: how each index is moving, its ten biggest companies, the latest headlines, and a coloured chart for any of them over a day to five years.
 - **Tasks**: what needs doing, how big each one is, and a note on how you'll do it. Tick them off on Home. (This began as "On my mind", which replaced the energy log; old check-ins stay in backups.)
 
-Everything you write stays on your phone. Nothing is sent anywhere. (The Stocks tab fetches public prices from Yahoo Finance and headlines from Google News, and works best in the Android app.) Use **Settings → Save a backup** now and then.
+Everything you write stays on your phone. Nothing is sent anywhere. Use **Settings → Save a backup** now and then.
 
 ## Install on Android
 

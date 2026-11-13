@@ -19,7 +19,6 @@ const ICONS = {
   mind: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 00-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0012 3z"/>',
   tasks: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/>',
   goals: '<path d="M5 21V4"/><path d="M5 4h12l-2.5 4.5L17 13H5"/>',
-  stocks: '<path d="M4 20h16"/><path d="M4 16l5-5 4 3 7-8"/><path d="M15 6h5v5"/>',
   settings: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   back: '<path d="M15 5l-7 7 7 7"/>',
 };

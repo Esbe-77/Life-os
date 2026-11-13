@@ -5,7 +5,7 @@ A personal, offline-first web app installed on Android from GitHub Pages. The ow
 ## Rules
 
 - No build step, no frameworks, no npm dependencies. Plain ES modules served as static files.
-- All data stays on the device. Never add a server or analytics. The only network calls are Google Fonts (optional) and the Stocks tab's public prices (Yahoo Finance chart data) and headlines (Google News RSS), made through `js/net.js`; they never send anything of the person's. In the Android app they go through `LifeOSAndroid.httpGet`, which only allows those hosts (`NET_HOSTS` in `MainActivity`).
+- All data stays on the device. Never add a server or analytics. The only network call is Google Fonts (optional, web install only; the Android app has no internet permission).
 - Never break existing saved data. If a module's data shape changes, migrate it on load in that module, and keep `importData` accepting older backups.
 - Use relative paths everywhere (the site is served from `/Life-os/`).
 - When you add, rename or remove a file, update `APP_FILES` in `sw.js` and bump `VERSION`.
@@ -19,12 +19,11 @@ css/app.css           all styles; colour tokens at the top (light + dark)
 js/app.js             router (#/<moduleId>/<view>), tab bar, settings page
 js/store.js           on-device storage: one JSON document per module in localStorage ("lifeos.v1.<id>")
 js/backup.js          one backup file for everything; restore; share/download
-js/net.js             getText()/getJSON() for the Stocks tab (through the Android app, or fetch on the web)
 js/ui.js              el() DOM helper, date/time pickers, hold-and-drag sortable(), date helpers ("YYYY-MM-DD" local dates)
 js/habits.js          habits on Home: weekly plans (Sunday planner, and a day-by-day Week page to re-plan mid-week and tick off days already gone, this week or last), habits to break (logged times), reminders, timers, their pages
 js/reminders.js       builds the phone's reminder list (habits, Sunday review, decision check-ins) and sends it to the app
 js/modules/index.js   module list, in tab-bar order
-js/modules/*.js       home (dashboard + habits), goals (steps, linked habits), stocks (ASX 200, S&P 500, Nasdaq 100: index, biggest 10 set by hand, news, charts), mind (Tasks; once "On my mind", so its id is still mind), weekly-review, decisions, people, energy (no longer a tab; kept for old data)
+js/modules/*.js       home (dashboard + habits), goals (steps, linked habits), mind (Tasks; once "On my mind", so its id is still mind), weekly-review, decisions, people, energy (no longer a tab; kept for old data)
 sw.js                 offline cache (web install only; the Android app skips it)
 android/              native shell: one WebView serving the web files from the APK (copied in at build time)
 .github/workflows/    builds the APK on every push and publishes it as a GitHub release
@@ -33,7 +32,7 @@ android/              native shell: one WebView serving the web files from the A
 ## Android app
 
 - The page is served at `https://appassets.androidplatform.net/assets/www/`. Never change that address or the `applicationId`: the saved data is tied to both.
-- `window.LifeOSAndroid` exists only inside the app. It provides `saveFile(name, text, mime)`, which reports back through `window.__lifeosSaveResult`, plus `version()`, `setReminders(json)`, `startTimer(id, seconds, title, text)`, `cancelTimer(id)`, `requestNotifications()`, `takeDone()`, `reminderStatus()`, `testReminder()`, `openNotificationSettings()`, `openAppSettings()` (the Phone reminders card in Settings) and `httpGet(id, url)`, which answers through `window.__lifeosHttp(id, status, text)`.
+- `window.LifeOSAndroid` exists only inside the app. It provides `saveFile(name, text, mime)`, which reports back through `window.__lifeosSaveResult`, plus `version()`, `setReminders(json)`, `startTimer(id, seconds, title, text)`, `cancelTimer(id)`, `requestNotifications()`, `takeDone()`, `reminderStatus()`, `testReminder()`, `openNotificationSettings()` and `openAppSettings()` (the Phone reminders card in Settings).
 - Habit reminders have a Done button and the Sunday review reminder a Complete button (both `DoneReceiver`; Complete marks that week's review done, keeping any answers). Habit reminders share one notification (`Reminders.showHabits`): a reminder that fires while an earlier one is still undone merges them into "N habits to do", with a Done button for each (up to three). A Done takes that habit off the notification: with goes left it only plays the notification sound, and the tap that completes a habit posts a short "complete" notification (its sound is the chime). In the app, `ding()` in ui.js plays one for each go. Taps are queued natively and collected by the page with `takeDone()` at start and on resume (`window.__lifeosResume`).
 - Reminders: the page always sends the whole list (`js/reminders.js`) after any save. `Reminders.java` books only the soonest 60 with AlarmManager (Android caps an app at 500 alarms) and books again each time one fires. `BootReceiver` books them again after a restart or an update.
 - File pickers (`<input type=file>`) work through `onShowFileChooser` in `MainActivity`.
