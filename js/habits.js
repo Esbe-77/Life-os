@@ -518,9 +518,12 @@ export function renderPlanPage(root, navigate) {
 // ---------- re-planning this week (#/home/week) ----------
 // Same layout as the Sunday planner, for the week you're in. Days already gone
 // can't be changed; a ✓ marks the days each habit was done.
-export function renderWeekPage(root, navigate) {
-  const t = today(), ws = weekStart(t);
-  const redraw = () => { const y = window.scrollY; root.replaceChildren(); renderWeekPage(root, navigate); window.scrollTo(0, y); };
+// The Week page: this week's plan, day by day. Days already gone can be
+// ticked off (or unticked) after the fact, planned or not; "Last week" shows
+// the week before, to tick off a day you missed on Sunday.
+export function renderWeekPage(root, navigate, last = false) {
+  const t = today(), ws = last ? addDays(weekStart(t), -7) : weekStart(t);
+  const redraw = () => { const y = window.scrollY; root.replaceChildren(); renderWeekPage(root, navigate, last); window.scrollTo(0, y); };
   const habits = doHabits();
   if (!habits.length) { root.append(el("p", { class: "muted", text: "No habits to plan yet. Add one on Home." })); return; }
   const dates = weekDates(ws);
@@ -533,9 +536,28 @@ export function renderWeekPage(root, navigate) {
     setPlan(h.id, ws, days.includes(n) ? days.filter(x => x !== n) : [...days, n]);
     redraw();
   };
+  // A day already gone: tick it off, or take the tick away. Ticking a day
+  // that wasn't planned adds it to that week's plan, so it counts.
+  const markPast = (h, n, iso) => {
+    if (countOn(h, iso) >= h.target) bump(h.id, iso, -h.target);
+    else {
+      const days = daysFor(h, ws) || [];
+      if (!days.includes(n)) {
+        const next = addDays(ws, 7);
+        if (h.fixed && !h.plans[next] && daysFor(h, next)) setPlan(h.id, next, daysFor(h, next));
+        setPlan(h.id, ws, [...days, n]);
+      }
+      bump(h.id, iso, h.target);
+    }
+    redraw();
+  };
 
   root.append(...[
-    el("p", { class: "small muted", text: `${shortDate(ws)} to ${shortDate(addDays(ws, 6))}. Tap the days to change this week's plan. Days already gone stay as they were.` }),
+    el("div", { class: "rowhead" },
+      el("p", { class: "small muted", style: "flex:1;min-width:0", text: last
+        ? `${shortDate(ws)} to ${shortDate(addDays(ws, 6))}. Tap a day to tick it off, or to take the tick away.`
+        : `${shortDate(ws)} to ${shortDate(addDays(ws, 6))}. Tap today or a day to come to change the plan. Tap a day already gone to tick it off.` }),
+      el("a", { class: "linkbtn", href: last ? "#/home/week" : "#/home/week/last" }, last ? "This week" : "Last week")),
     el("div", { class: "rows" }, habits.map(h => {
       const days = daysFor(h, ws) || [];
       return el("div", { class: "row", style: "flex-direction:column;align-items:stretch;gap:10px" },
@@ -545,14 +567,14 @@ export function renderWeekPage(root, navigate) {
         el("div", { class: "hb-days" }, WEEKDAYS.map(([n, label], i) => {
           const iso = dates[i], done = countOn(h, iso) >= h.target;
           return el("button", {
-            type: "button", class: "chip" + (iso === t ? " today" : ""), disabled: iso < t,
+            type: "button", class: "chip" + (iso === t ? " today" : "") + (iso < t ? " past" : "") + (done ? " done" : ""),
             "aria-pressed": String(days.includes(n)), "aria-label": `${DAY_NAMES[n]} ${shortDate(iso)}${done ? ", done" : ""}`,
-            onclick: () => toggle(h, n),
+            onclick: () => iso < t ? markPast(h, n, iso) : toggle(h, n),
           }, el("span", { text: label }), el("small", { text: done ? "✓" : parseDate(iso).getDate() }));
         })));
     })),
     el("div", { class: "actions" },
-      planWeek() > ws ? el("a", { class: "btn", href: "#/home/plan" }, "Plan next week") : null,
+      !last && planWeek() > ws ? el("a", { class: "btn", href: "#/home/plan" }, "Plan next week") : null,
       el("button", { class: "btn primary", onclick: () => navigate("home") }, "Done"))].filter(Boolean));
 }
 

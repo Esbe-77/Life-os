@@ -33,7 +33,7 @@ export default {
   icon: "home",
   color: "var(--accent)",
 
-  title(view) { return view === "plan" ? planTitle() : view === "week" ? "This week" : view.startsWith("habit/") ? (getHabit(view.slice(6))?.name || "Habit") : greeting(); },
+  title(view) { return view === "plan" ? planTitle() : view === "week" ? "This week" : view === "week/last" ? "Last week" : view.startsWith("habit/") ? (getHabit(view.slice(6))?.name || "Habit") : greeting(); },
   backTo(view) { return view ? "home" : null; },
   subtitle(view) { if (view) return ""; const d = new Date(); return `${DAYS[d.getDay()]} ${d.getDate()} ${LONG_MONTHS[d.getMonth()]}`; },
   hasData() { return loadHabits().length > 0; },
@@ -57,7 +57,7 @@ export default {
       const y = window.scrollY;
       root.replaceChildren();
       if (view === "plan") { renderPlanPage(root, navigate); return; }
-      if (view === "week") { renderWeekPage(root, navigate); return; }
+      if (view === "week" || view === "week/last") { renderWeekPage(root, navigate, view === "week/last"); return; }
       if (view.startsWith("habit/")) { renderHabitPage(root, view.slice(6), navigate); return; }
       const sections = [sundayNudge(), habitsSection(render, { open: isOpen("habits"), toggle: toggle("habits") }), tasksSection(), goalsSection(), prioritiesSection(), peopleSection(), decisionsSection(), backupNudge()];
       sections.forEach(s => s && root.append(s));
@@ -143,16 +143,20 @@ export default {
         setTimeout(() => root.querySelector(".hm-task-new")?.focus(), 0);
       };
       input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
-      const shown = items.slice(0, 5);
+      const shown = items.slice(0, 5), week = mind.doneThisWeek();
+      // Ticked tasks stay here, ticked, until the week ends on Sunday. Tap again to untick.
+      const row = (i, isDone) => el("div", { class: "row goal-row" + (isDone ? " hm-task-done" : "") },
+        el("button", { class: "goal-tick hm-task-tick" + (isDone ? " on" : ""), "aria-label": `${isDone ? "Not done" : "Done"}: ${i.text}`, onclick: e => {
+          if (isDone) { mind.reopen(i.id); return; }
+          e.currentTarget.classList.add("on"); e.currentTarget.textContent = "✓";
+          setTimeout(() => mind.complete(i.id), 250);
+        } }, isDone ? "✓" : null),
+        el("a", { class: "main", href: `#/mind/${i.id}` }, el("span", { class: "title", text: i.text.split("\n")[0] })));
       return el("section", { class: "section" },
         head("tasks", "Tasks", items.length ? `${items.length} to do` : "", el("a", { class: "linkbtn", href: "#/mind" }, items.length > shown.length ? `All ${items.length}` : "Open")),
         isOpen("tasks") && el("div", { class: "rows" },
-          shown.map(i => el("div", { class: "row goal-row" },
-            el("button", { class: "goal-tick hm-task-tick", "aria-label": `Done: ${i.text}`, onclick: e => {
-              e.currentTarget.classList.add("on"); e.currentTarget.textContent = "✓";
-              setTimeout(() => mind.complete(i.id), 250);
-            } }),
-            el("a", { class: "main", href: `#/mind/${i.id}` }, el("span", { class: "title", text: i.text.split("\n")[0] })))),
+          shown.map(i => row(i, false)),
+          week.map(i => row(i, true)),
           el("div", { class: "row hm-task-add" }, input, el("button", { class: "btn small", onclick: add }, "Add"))));
     }
 

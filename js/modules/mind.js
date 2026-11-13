@@ -7,7 +7,7 @@
 //                status: "open" | "done", createdAt, updatedAt, doneAt } ] }
 
 import * as store from "../store.js";
-import { el, formatDate, isoDate } from "../ui.js";
+import { el, formatDate, isoDate, weekStart } from "../ui.js";
 
 const ID = "mind";
 const WEIGHTS = [[1, "Small", "var(--w1)"], [2, "Medium", "var(--w2)"], [3, "Big", "var(--w3)"]];
@@ -25,6 +25,14 @@ function saveItems(items) { return store.save(ID, { items }); }
 const open = items => items.filter(i => i.status !== "done")
   .sort((a, b) => b.weight - a.weight || b.createdAt.localeCompare(a.createdAt));
 
+// Tasks ticked off this week (Monday to Sunday) stay in the list, ticked,
+// until the week ends; older ones move to "Done".
+const doneThisWeek = items => {
+  const ws = weekStart(isoDate(new Date()));
+  return items.filter(i => i.status === "done" && i.doneAt && isoDate(new Date(i.doneAt)) >= ws)
+    .sort((a, b) => b.doneAt.localeCompare(a.doneAt));
+};
+
 let lastWeight = 2; // the add form remembers the last size picked
 
 export default {
@@ -37,6 +45,10 @@ export default {
   backTo(view) { return view ? ID : null; },
   hasData() { return loadItems().length > 0; },
   openItems() { return open(loadItems()); },
+  doneThisWeek() { return doneThisWeek(loadItems()); },
+  reopen(id) {
+    return saveItems(loadItems().map(i => i.id === id ? { ...i, status: "open", doneAt: null, updatedAt: now() } : i));
+  },
   // For Home: add a task, or tick one off.
   add(text) {
     const items = loadItems();
@@ -109,20 +121,20 @@ export default {
         input,
         el("div", { class: "actions" }, sizes, el("button", { class: "btn primary", onclick: add }, "Add"))));
 
-      const list = open(items);
-      if (!list.length) {
+      const list = open(items), week = doneThisWeek(items);
+      if (!list.length && !week.length) {
         root.append(el("p", { class: "small muted", text: items.length
           ? "Nothing to do. Nice."
           : "Write down anything you need to get done, big or small. Tap one to add a note, and tick it off when it's done." }));
       } else {
         const planned = list.filter(i => i.plan.trim()).length;
         root.append(el("div", { class: "rowhead" },
-          el("h2", { style: "font-size:20px;font-weight:500", text: `${list.length} to do` }),
+          el("h2", { style: "font-size:20px;font-weight:500", text: list.length ? `${list.length} to do` : "All done" }),
           el("span", { class: "mono muted", text: planned ? `${planned} with a note` : "tap one to add a note" })));
-        root.append(el("div", { class: "rows" }, list.map(itemRow)));
+        root.append(el("div", { class: "rows" }, [...list, ...week].map(itemRow)));
       }
 
-      const done = items.filter(i => i.status === "done").sort((a, b) => (b.doneAt || "").localeCompare(a.doneAt || ""));
+      const done = items.filter(i => i.status === "done" && !week.includes(i)).sort((a, b) => (b.doneAt || "").localeCompare(a.doneAt || ""));
       if (done.length) {
         root.append(el("button", { class: "linkbtn", style: "align-self:flex-start;color:var(--muted)", onclick: () => { showDone = !showDone; render(); } },
           showDone ? "Hide done" : `Done (${done.length})`));
