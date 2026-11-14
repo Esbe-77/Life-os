@@ -13,6 +13,7 @@
 //                 target: times a day (1 for most), counts: { "YYYY-MM-DD": n } (when target > 1),
 //                 plans: { "<Monday YYYY-MM-DD>": [0–6] (Date.getDay(), 0 = Sunday) },
 //                 fixed: bool (use the latest plan when a week has none),
+//                 extra: ["YYYY-MM-DD", ...] (unplanned days ticked off after the fact, which added them to the plan),
 //                 reminders: [ { id, time: "HH:MM" } ], completedAt (last time a day was completed),
 //                 timerMin: number | null, timerEndsAt: ISO datetime | null,
 //                 log: [ { id, at: "YYYY-MM-DDTHH:MM", note } ] } ] }
@@ -42,6 +43,7 @@ function normalize(h) {
   const n = { kind: "do", reminders: [], timerMin: null, timerEndsAt: null, done: [], log: [], fixed: false, target: 1, counts: {}, ...h };
   n.target = Math.max(1, Math.min(20, Math.round(+n.target) || 1));
   if (!n.counts || typeof n.counts !== "object") n.counts = {};
+  if (!Array.isArray(n.extra)) n.extra = [];
   if (n.kind !== "break") n.kind = "do";
   if (!n.plans || typeof n.plans !== "object") {
     n.plans = {};
@@ -539,13 +541,20 @@ export function renderWeekPage(root, navigate, last = false) {
   // A day already gone: tick it off, or take the tick away. Ticking a day
   // that wasn't planned adds it to that week's plan, so it counts.
   const markPast = (h, n, iso) => {
-    if (countOn(h, iso) >= h.target) bump(h.id, iso, -h.target);
-    else {
-      const days = daysFor(h, ws) || [];
+    const days = daysFor(h, ws) || [];
+    if (countOn(h, iso) >= h.target) {
+      bump(h.id, iso, -h.target);
+      // A day that was only in the plan because it was ticked comes back out.
+      if (h.extra.includes(iso)) {
+        setPlan(h.id, ws, days.filter(x => x !== n));
+        patchHabit(h.id, { extra: h.extra.filter(d => d !== iso) });
+      }
+    } else {
       if (!days.includes(n)) {
         const next = addDays(ws, 7);
         if (h.fixed && !h.plans[next] && daysFor(h, next)) setPlan(h.id, next, daysFor(h, next));
         setPlan(h.id, ws, [...days, n]);
+        patchHabit(h.id, { extra: [...h.extra, iso] });
       }
       bump(h.id, iso, h.target);
     }
