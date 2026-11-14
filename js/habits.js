@@ -572,7 +572,7 @@ export function renderWeekPage(root, navigate, last = false) {
       return el("div", { class: "row", style: "flex-direction:column;align-items:stretch;gap:10px" },
         el("div", { class: "rowhead" },
           el("a", { class: "title", href: `#/home/habit/${h.id}`, style: "color:inherit;text-decoration:none", text: h.name }),
-          el("span", { class: "mono muted", text: days.length ? `${days.length} day${days.length === 1 ? "" : "s"}` : "not planned" })),
+          el("span", { class: "mono muted", text: days.length ? `${dates.filter(d => days.includes(parseDate(d).getDay()) && countOn(h, d) >= h.target).length} of ${days.length} done` : "not planned" })),
         el("div", { class: "hb-days" }, WEEKDAYS.map(([n, label], i) => {
           const iso = dates[i], done = countOn(h, iso) >= h.target;
           return el("button", {
