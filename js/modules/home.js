@@ -11,7 +11,6 @@ import { el, addDays, parseDate, formatDate, foldHead } from "../ui.js";
 import { loadHabits, saveHabits, mergeHabits, habitsSection, renderHabitPage, renderPlanPage, renderWeekPage, planTitle, tickTimers, getHabit } from "../habits.js";
 import review from "./weekly-review.js";
 import decisions from "./decisions.js";
-import people from "./people.js";
 import mind from "./mind.js";
 import goals from "./goals.js";
 
@@ -59,7 +58,7 @@ export default {
       if (view === "plan") { renderPlanPage(root, navigate); return; }
       if (view === "week" || view === "week/last") { renderWeekPage(root, navigate, view === "week/last"); return; }
       if (view.startsWith("habit/")) { renderHabitPage(root, view.slice(6), navigate); return; }
-      const sections = [sundayNudge(), habitsSection(render, { open: isOpen("habits"), toggle: toggle("habits") }), tasksSection(), goalsSection(), prioritiesSection(), peopleSection(), decisionsSection(), backupNudge()];
+      const sections = [sundayNudge(), habitsSection(render, { open: isOpen("habits"), toggle: toggle("habits") }), tasksSection(), goalsSection(), prioritiesSection(), decisionsSection(), backupNudge()];
       sections.forEach(s => s && root.append(s));
       window.scrollTo(0, y);
     }
@@ -89,27 +88,6 @@ export default {
             el("div", {}, el("div", { class: "k", text: "What matters" }), el("div", { class: "v", text: r.answers.matters.trim() }))) : null,
           r.answers.drop?.trim() ? el("div", { class: "wr-ans", style: "--qc:var(--q-drop)" },
             el("div", {}, el("div", { class: "k", text: "Dropping" }), el("div", { class: "v", text: r.answers.drop.trim() }))) : null));
-    }
-
-    // ----- who to reach out to -----
-    function peopleSection() {
-      const due = people.due().slice(0, 3);
-      if (!due.length) return null;
-      const rows = el("div", { class: "rows" });
-      due.forEach(p => {
-        const right = el("div", { class: "tools" });
-        right.append(el("button", { class: "btn small", onclick: () => {
-          people.logToday(p.id);
-          right.replaceChildren(el("span", { class: "pill", style: "--pc:var(--q-well)", text: "Logged" }));
-        } }, "Talked today"));
-        const st = people.status(p);
-        rows.append(el("div", { class: `row pp-row ${st.key}`, style: `--pc:${st.color}` },
-          el("a", { class: "main", href: `#/people/${p.id}` }, el("span", { class: "title", text: p.name }), el("span", { class: "meta", text: people.sinceText(p) })),
-          right));
-      });
-      return el("section", { class: "section" },
-        head("people", "Reach out to", `${due.length} due`, el("a", { class: "linkbtn", href: "#/people" }, "All people")),
-        isOpen("people") && rows);
     }
 
     // ----- decisions due -----
@@ -171,7 +149,7 @@ export default {
     }
 
     render();
-    const offs = ["habits", "weekly-review", "people", "decisions", "mind", "goals"].map(k => store.onChange(k, render));
+    const offs = ["habits", "weekly-review", "decisions", "mind", "goals"].map(k => store.onChange(k, render));
     const stopTimers = tickTimers(root, () => render());
     const tick = () => { if (document.visibilityState === "visible") { render(); refreshChrome(); } };
     document.addEventListener("visibilitychange", tick);
