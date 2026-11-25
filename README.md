@@ -2,12 +2,11 @@
 
 A calm personal app for your phone, built from a few small parts:
 
-- **Home**: today's habits (planned each Sunday, plus habits you're cutting back on, logged each time), your tasks, how each goal is going, this week's priorities, who to reach out to, and decisions waiting on you. Tap a section's heading to fold it away.
+- **Home**: today's habits (planned each Sunday, plus habits you're cutting back on, logged each time), your tasks, how each goal is going, this week's priorities and decisions waiting on you. Tap a section's heading to fold it away.
 - **Weekly review**: the same five questions every Sunday (what went well, what drained you, what you avoided, what matters next week, one thing to drop), plus a look back over months.
 - **Decision journal**: write down what you decided, why, and what you expect. When the check-in date comes, it asks how it turned out.
-- **People**: the 15–20 people who matter most, and a gentle nudge when it's been a while.
 - **Goals**: a few things you want to make happen. Each has why it matters, what done looks like, an optional date, small steps (the next one shows on Home) and the habits that help.
-- **Tasks**: what needs doing, how big each one is, and a note on how you'll do it. Tick them off on Home. (This began as "On my mind", which replaced the energy log; old check-ins stay in backups.)
+- **Tasks**: what needs doing, how big each one is, and a note on how you'll do it. Tick them off on Home. (This began as "On my mind", which replaced the energy log; old check-ins stay in backups.) The People tab was removed too; anything saved there stays in backups.
 
 Everything you write stays on your phone. Nothing is sent anywhere. Use **Settings → Save a backup** now and then.
 
